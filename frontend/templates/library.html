@@ -484,9 +484,9 @@ function library() {
                 // Then by selected sort
                 switch (this.sortBy) {
                     case 'recent':
-                        return new Date(b.added_at) - new Date(a.added_at);
+                        return new Date(b.published) - new Date(a.published);
                     case 'oldest':
-                        return new Date(a.added_at) - new Date(b.added_at);
+                        return new Date(a.published) - new Date(b.published);
                     case 'title':
                         return a.title.toLowerCase().localeCompare(b.title.toLowerCase());
                     case 'author_last':
