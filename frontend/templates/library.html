@@ -7,7 +7,7 @@
 <div x-data="library()" x-init="init()">
     
     <!-- Search and Filters Bar -->
-    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4 mb-6">
+    <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-4 mb-6">
         <div class="flex flex-col md:flex-row gap-4">
             <!-- Search Input -->
             <div class="flex-1 relative">
@@ -18,7 +18,9 @@
                        x-model="searchQuery"
                        @input="filterPapers()"
                        placeholder="Search titles, abstracts, authors, notes..."
-                       class="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg text-sm
+                       class="w-full pl-10 pr-4 py-2 border border-gray-200 dark:border-gray-600 rounded-lg text-sm
+                              bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100
+                              placeholder:text-gray-400 dark:placeholder:text-gray-500
                               focus:outline-none focus:ring-2 focus:ring-arxiv-red/20 focus:border-arxiv-red">
             </div>
             
@@ -26,8 +28,8 @@
             <div class="flex gap-2 flex-wrap">
                 <!-- Starred Filter -->
                 <button @click="filterStarred = !filterStarred; filterPapers()"
-                        :class="filterStarred ? 'bg-yellow-100 border-yellow-300 text-yellow-700' : 'border-gray-200 text-gray-600'"
-                        class="px-3 py-2 border rounded-lg text-sm flex items-center gap-1.5 hover:bg-gray-50">
+                        :class="filterStarred ? 'bg-yellow-100 dark:bg-yellow-900/30 border-yellow-300 dark:border-yellow-700 text-yellow-700 dark:text-yellow-400' : 'border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300'"
+                        class="px-3 py-2 border rounded-lg text-sm flex items-center gap-1.5 hover:bg-gray-50 dark:hover:bg-gray-700">
                     <svg class="w-4 h-4" :class="filterStarred ? 'text-yellow-500' : 'text-gray-400'" fill="currentColor" viewBox="0 0 20 20">
                         <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/>
                     </svg>
@@ -37,7 +39,7 @@
                 <!-- Shelf Filter -->
                 <div class="relative" x-data="{ open: false }">
                     <button @click="open = !open"
-                            class="px-3 py-2 border border-gray-200 rounded-lg text-sm flex items-center gap-2 hover:bg-gray-50">
+                            class="px-3 py-2 border border-gray-200 dark:border-gray-600 rounded-lg text-sm flex items-center gap-2 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300">
                         <span>Shelf</span>
                         <span x-show="filterShelf" class="bg-arxiv-red text-white text-xs px-1.5 rounded">1</span>
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -45,15 +47,15 @@
                         </svg>
                     </button>
                     <div x-show="open" x-cloak @click.away="open = false"
-                         class="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg py-1 min-w-[150px] z-10">
+                         class="absolute top-full left-0 mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg py-1 min-w-[150px] z-10">
                         <button @click="filterShelf = null; filterPapers(); open = false"
-                                class="w-full px-3 py-2 text-left text-sm hover:bg-gray-50"
+                                class="w-full px-3 py-2 text-left text-sm hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300"
                                 :class="{ 'text-arxiv-red': !filterShelf }">
                             All Shelves
                         </button>
                         <template x-for="shelf in shelves" :key="shelf.id">
                             <button @click="filterShelf = shelf.id; filterPapers(); open = false"
-                                    class="w-full px-3 py-2 text-left text-sm hover:bg-gray-50"
+                                    class="w-full px-3 py-2 text-left text-sm hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300"
                                     :class="{ 'text-arxiv-red': filterShelf === shelf.id }"
                                     x-text="shelf.name + ' (' + shelf.paper_count + ')'">
                             </button>
@@ -64,7 +66,7 @@
                 <!-- Tag Filter -->
                 <div class="relative" x-data="{ open: false }">
                     <button @click="open = !open"
-                            class="px-3 py-2 border border-gray-200 rounded-lg text-sm flex items-center gap-2 hover:bg-gray-50">
+                            class="px-3 py-2 border border-gray-200 dark:border-gray-600 rounded-lg text-sm flex items-center gap-2 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300">
                         <span>Tags</span>
                         <span x-show="filterTags.length" class="bg-purple-600 text-white text-xs px-1.5 rounded" x-text="filterTags.length"></span>
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -72,15 +74,15 @@
                         </svg>
                     </button>
                     <div x-show="open" x-cloak @click.away="open = false"
-                         class="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg py-1 min-w-[150px] z-10 max-h-64 overflow-auto">
+                         class="absolute top-full left-0 mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg py-1 min-w-[150px] z-10 max-h-64 overflow-auto">
                         <template x-for="tag in tags" :key="tag.name">
-                            <label class="flex items-center px-3 py-2 hover:bg-gray-50 cursor-pointer">
+                            <label class="flex items-center px-3 py-2 hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer">
                                 <input type="checkbox" 
                                        :checked="filterTags.includes(tag.name)"
                                        @change="toggleFilterTag(tag.name)"
                                        class="mr-2 rounded text-purple-600">
-                                <span class="text-sm" x-text="tag.name"></span>
-                                <span class="text-gray-400 text-xs ml-auto" x-text="'(' + tag.paper_count + ')'"></span>
+                                <span class="text-sm text-gray-700 dark:text-gray-300" x-text="tag.name"></span>
+                                <span class="text-gray-400 dark:text-gray-500 text-xs ml-auto" x-text="'(' + tag.paper_count + ')'"></span>
                             </label>
                         </template>
                     </div>
@@ -89,7 +91,7 @@
                 <!-- Status Filter -->
                 <div class="relative" x-data="{ open: false }">
                     <button @click="open = !open"
-                            class="px-3 py-2 border border-gray-200 rounded-lg text-sm flex items-center gap-2 hover:bg-gray-50">
+                            class="px-3 py-2 border border-gray-200 dark:border-gray-600 rounded-lg text-sm flex items-center gap-2 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300">
                         <span>Status</span>
                         <span x-show="filterStatus" class="bg-green-600 text-white text-xs px-1.5 rounded">1</span>
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -97,13 +99,13 @@
                         </svg>
                     </button>
                     <div x-show="open" x-cloak @click.away="open = false"
-                         class="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg py-1 min-w-[120px] z-10">
+                         class="absolute top-full left-0 mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg py-1 min-w-[120px] z-10">
                         <button @click="filterStatus = null; filterPapers(); open = false"
-                                class="w-full px-3 py-2 text-left text-sm hover:bg-gray-50">All</button>
+                                class="w-full px-3 py-2 text-left text-sm hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300">All</button>
                         <button @click="filterStatus = 'to-read'; filterPapers(); open = false"
-                                class="w-full px-3 py-2 text-left text-sm hover:bg-gray-50">📚 To Read</button>
+                                class="w-full px-3 py-2 text-left text-sm hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300">📚 To Read</button>
                         <button @click="filterStatus = 'read'; filterPapers(); open = false"
-                                class="w-full px-3 py-2 text-left text-sm hover:bg-gray-50">✓ Read</button>
+                                class="w-full px-3 py-2 text-left text-sm hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300">✓ Read</button>
                     </div>
                 </div>
                 
@@ -120,12 +122,14 @@
         </div>
         
         <!-- Second Row: Sort and Display Options -->
-        <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mt-4 pt-4 border-t border-gray-100">
+        <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mt-4 pt-4 border-t border-gray-100 dark:border-gray-700">
             <!-- Sort Options -->
             <div class="flex items-center gap-2">
-                <span class="text-xs text-gray-500">Sort:</span>
+                <span class="text-xs text-gray-500 dark:text-gray-400">Sort:</span>
                 <select x-model="sortBy" @change="filterPapers()"
-                        class="text-sm border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-arxiv-red">
+                        class="text-sm border border-gray-200 dark:border-gray-600 rounded-lg px-2 py-1.5 
+                               bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300
+                               focus:outline-none focus:ring-1 focus:ring-arxiv-red">
                     <option value="recent">Recent first</option>
                     <option value="oldest">Oldest first</option>
                     <option value="title">Title (A-Z)</option>
@@ -136,24 +140,31 @@
             
             <!-- Display Options -->
             <div class="flex items-center gap-2">
-                <span class="text-xs text-gray-500">Size:</span>
-                <div class="flex border border-gray-200 rounded-lg overflow-hidden">
+                <span class="text-xs text-gray-500 dark:text-gray-400">View:</span>
+                <div class="flex border border-gray-200 dark:border-gray-600 rounded-lg overflow-hidden">
+                    <button @click="cardSize = 'list'" 
+                            :class="cardSize === 'list' ? 'bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white' : 'text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'"
+                            class="px-2.5 py-1.5 text-xs font-medium" title="List view">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"/>
+                        </svg>
+                    </button>
                     <button @click="cardSize = 'small'" 
-                            :class="cardSize === 'small' ? 'bg-gray-100 text-gray-900' : 'text-gray-500 hover:bg-gray-50'"
-                            class="px-2.5 py-1.5 text-xs font-medium">S</button>
+                            :class="cardSize === 'small' ? 'bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white' : 'text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'"
+                            class="px-2.5 py-1.5 text-xs font-medium border-l border-gray-200 dark:border-gray-600">S</button>
                     <button @click="cardSize = 'medium'" 
-                            :class="cardSize === 'medium' ? 'bg-gray-100 text-gray-900' : 'text-gray-500 hover:bg-gray-50'"
-                            class="px-2.5 py-1.5 text-xs font-medium border-l border-r border-gray-200">M</button>
+                            :class="cardSize === 'medium' ? 'bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white' : 'text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'"
+                            class="px-2.5 py-1.5 text-xs font-medium border-l border-gray-200 dark:border-gray-600">M</button>
                     <button @click="cardSize = 'large'" 
-                            :class="cardSize === 'large' ? 'bg-gray-100 text-gray-900' : 'text-gray-500 hover:bg-gray-50'"
-                            class="px-2.5 py-1.5 text-xs font-medium">L</button>
+                            :class="cardSize === 'large' ? 'bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white' : 'text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700'"
+                            class="px-2.5 py-1.5 text-xs font-medium border-l border-gray-200 dark:border-gray-600">L</button>
                 </div>
             </div>
         </div>
     </div>
     
     <!-- Results Count -->
-    <div class="mb-4 text-sm text-gray-500">
+    <div class="mb-4 text-sm text-gray-500 dark:text-gray-400">
         <span x-text="filteredPapers.length"></span> of <span x-text="allPapers.length"></span> papers
         <span x-show="searchQuery || filterShelf || filterTags.length || filterStatus || filterStarred">
             (filtered)
@@ -162,7 +173,7 @@
     
     <!-- Loading State -->
     <div x-show="loading" class="text-center py-12">
-        <svg class="animate-spin h-8 w-8 mx-auto text-gray-400" viewBox="0 0 24 24">
+        <svg class="animate-spin h-8 w-8 mx-auto text-gray-400 dark:text-gray-500" viewBox="0 0 24 24">
             <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"/>
             <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/>
         </svg>
@@ -170,29 +181,29 @@
     
     <!-- Empty State -->
     <div x-show="!loading && allPapers.length === 0" class="text-center py-12">
-        <svg class="w-16 h-16 mx-auto text-gray-300 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <svg class="w-16 h-16 mx-auto text-gray-300 dark:text-gray-600 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" 
                   d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/>
         </svg>
-        <p class="text-gray-500 mb-4">Your library is empty</p>
+        <p class="text-gray-500 dark:text-gray-400 mb-4">Your library is empty</p>
         <a href="/" class="text-arxiv-red hover:underline text-sm">Add your first paper</a>
     </div>
     
     <!-- No Results State -->
     <div x-show="!loading && allPapers.length > 0 && filteredPapers.length === 0" class="text-center py-12">
-        <p class="text-gray-500 mb-4">No papers match your filters</p>
+        <p class="text-gray-500 dark:text-gray-400 mb-4">No papers match your filters</p>
         <button @click="clearFilters()" class="text-arxiv-red hover:underline text-sm">Clear filters</button>
     </div>
     
-    <!-- Papers Grid -->
-    <div x-show="!loading && filteredPapers.length > 0" 
+    <!-- Papers Grid View -->
+    <div x-show="!loading && filteredPapers.length > 0 && cardSize !== 'list'" 
          :class="{
              'grid-cols-1 md:grid-cols-2 lg:grid-cols-3': cardSize === 'small' || cardSize === 'medium',
              'grid-cols-1 lg:grid-cols-2': cardSize === 'large'
          }"
          class="grid gap-4">
         <template x-for="paper in filteredPapers" :key="paper.arxiv_id">
-            <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden hover:shadow-md transition-shadow">
+            <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden hover:shadow-md transition-shadow">
                 <!-- Cover Image -->
                 <template x-if="paper.cover_image">
                     <div :class="{
@@ -200,7 +211,7 @@
                              'h-48': cardSize === 'medium',
                              'h-56': cardSize === 'large'
                          }"
-                         class="bg-gray-100 overflow-hidden">
+                         class="bg-gray-100 dark:bg-gray-700 overflow-hidden">
                         <img :src="'/uploads/' + paper.cover_image" 
                              class="w-full h-full object-cover"
                              alt="Paper cover">
@@ -213,14 +224,14 @@
                     <div class="flex items-center justify-between mb-2">
                         <div class="flex gap-2">
                             <span x-show="paper.status === 'to-read'" 
-                                  class="text-xs px-2 py-0.5 bg-yellow-100 text-yellow-700 rounded">📚 To Read</span>
+                                  class="text-xs px-2 py-0.5 bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400 rounded">📚 To Read</span>
                             <span x-show="paper.status === 'read'" 
-                                  class="text-xs px-2 py-0.5 bg-green-100 text-green-700 rounded">✓ Read</span>
+                                  class="text-xs px-2 py-0.5 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 rounded">✓ Read</span>
                         </div>
                         <!-- Star indicator -->
                         <button @click.prevent="toggleStar(paper)" 
                                 class="p-1 -m-1 hover:scale-110 transition-transform"
-                                :class="paper.starred ? 'text-yellow-400' : 'text-gray-300 hover:text-yellow-400'">
+                                :class="paper.starred ? 'text-yellow-400' : 'text-gray-300 dark:text-gray-600 hover:text-yellow-400'">
                             <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
                                 <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/>
                             </svg>
@@ -229,12 +240,12 @@
                     
                     <!-- Title -->
                     <a :href="'/paper/' + paper.arxiv_id"
-                       class="block text-sm font-medium text-gray-900 hover:text-arxiv-red mb-2"
+                       class="block text-sm font-medium text-gray-900 dark:text-gray-100 hover:text-arxiv-red mb-2"
                        :class="cardSize === 'small' ? 'line-clamp-2' : 'line-clamp-3'"
                        x-html="paper.title"></a>
                     
                     <!-- Authors -->
-                    <p class="text-xs text-gray-500 mb-2 line-clamp-1">
+                    <p class="text-xs text-gray-500 dark:text-gray-400 mb-2 line-clamp-1">
                         <span x-text="paper.authors.slice(0, 3).join(', ')"></span>
                         <span x-show="paper.authors.length > 3">...</span>
                     </p>
@@ -246,22 +257,83 @@
                     <!-- Tags -->
                     <div class="flex flex-wrap gap-1 mb-3">
                         <template x-for="tag in paper.tags.slice(0, 3)" :key="tag">
-                            <span class="text-xs px-2 py-0.5 bg-purple-50 text-purple-700 rounded"
+                            <span class="text-xs px-2 py-0.5 bg-purple-50 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400 rounded"
                                   x-text="tag"></span>
                         </template>
                         <span x-show="paper.tags.length > 3" 
-                              class="text-xs px-2 py-0.5 bg-gray-100 text-gray-500 rounded"
+                              class="text-xs px-2 py-0.5 bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 rounded"
                               x-text="'+' + (paper.tags.length - 3)"></span>
                     </div>
                     
                     <!-- Footer -->
-                    <div class="flex items-center justify-between text-xs text-gray-400">
+                    <div class="flex items-center justify-between text-xs text-gray-400 dark:text-gray-500">
                         <span x-text="paper.arxiv_id"></span>
                         <div class="flex gap-2">
                             <a :href="paper.arxiv_url" target="_blank" class="hover:text-arxiv-red">arXiv</a>
                             <a :href="paper.pdf_url" target="_blank" class="hover:text-arxiv-red">PDF</a>
                         </div>
                     </div>
+                </div>
+            </div>
+        </template>
+    </div>
+    
+    <!-- Papers List View -->
+    <div x-show="!loading && filteredPapers.length > 0 && cardSize === 'list'" 
+         class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
+        <!-- List Header -->
+        <div class="hidden sm:grid grid-cols-12 gap-4 px-4 py-2 bg-gray-50 dark:bg-gray-700/50 border-b border-gray-200 dark:border-gray-700 text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">
+            <div class="col-span-1"></div>
+            <div class="col-span-5">Title</div>
+            <div class="col-span-2">Author</div>
+            <div class="col-span-2">Shelf / Tags</div>
+            <div class="col-span-2 text-right">Links</div>
+        </div>
+        
+        <!-- List Items -->
+        <template x-for="paper in filteredPapers" :key="paper.arxiv_id">
+            <div class="grid grid-cols-12 gap-4 px-4 py-3 border-b border-gray-100 dark:border-gray-700/50 hover:bg-gray-50 dark:hover:bg-gray-700/30 items-center text-sm">
+                <!-- Star + Status -->
+                <div class="col-span-1 flex items-center gap-1">
+                    <button @click.prevent="toggleStar(paper)" 
+                            class="hover:scale-110 transition-transform"
+                            :class="paper.starred ? 'text-yellow-400' : 'text-gray-300 dark:text-gray-600 hover:text-yellow-400'">
+                        <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                            <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/>
+                        </svg>
+                    </button>
+                    <span x-show="paper.status === 'to-read'" class="text-yellow-500 text-xs">📚</span>
+                    <span x-show="paper.status === 'read'" class="text-green-500 text-xs">✓</span>
+                </div>
+                
+                <!-- Title -->
+                <div class="col-span-5">
+                    <a :href="'/paper/' + paper.arxiv_id"
+                       class="text-gray-900 dark:text-gray-100 hover:text-arxiv-red line-clamp-1 font-medium"
+                       x-html="paper.title"></a>
+                    <span class="text-xs text-gray-400 dark:text-gray-500 ml-1" x-text="paper.arxiv_id"></span>
+                </div>
+                
+                <!-- Author -->
+                <div class="col-span-2 text-gray-600 dark:text-gray-400 text-xs">
+                    <span x-text="getFirstAuthorShort(paper.authors)"></span>
+                </div>
+                
+                <!-- Shelf / Tags -->
+                <div class="col-span-2 flex flex-wrap gap-1">
+                    <template x-for="tag in paper.tags.slice(0, 2)" :key="tag">
+                        <span class="text-xs px-1.5 py-0.5 bg-purple-50 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400 rounded"
+                              x-text="tag"></span>
+                    </template>
+                    <span x-show="paper.tags.length > 2" 
+                          class="text-xs text-gray-400"
+                          x-text="'+' + (paper.tags.length - 2)"></span>
+                </div>
+                
+                <!-- Links -->
+                <div class="col-span-2 text-right text-xs space-x-2">
+                    <a :href="paper.arxiv_url" target="_blank" class="text-gray-400 hover:text-arxiv-red">arXiv</a>
+                    <a :href="paper.pdf_url" target="_blank" class="text-gray-400 hover:text-arxiv-red">PDF</a>
                 </div>
             </div>
         </template>
@@ -466,6 +538,24 @@ function library() {
             this.filterStatus = null;
             this.filterStarred = false;
             this.filterPapers();
+        },
+        
+        // Helper for list view - returns "LastName et al." or just "LastName"
+        getFirstAuthorShort(authors) {
+            if (!authors || authors.length === 0) return '';
+            const first = authors[0];
+            const suffixes = ['jr', 'jr.', 'sr', 'sr.', 'ii', 'iii', 'iv', 'phd', 'md'];
+            const parts = first.trim().split(/\s+/);
+            let lastName = parts[parts.length - 1];
+            // Skip suffixes
+            for (let i = parts.length - 1; i >= 0; i--) {
+                const part = parts[i].toLowerCase().replace(/[.,]/g, '');
+                if (!suffixes.includes(part)) {
+                    lastName = parts[i];
+                    break;
+                }
+            }
+            return authors.length > 1 ? `${lastName} et al.` : lastName;
         }
     };
 }

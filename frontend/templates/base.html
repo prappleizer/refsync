@@ -9,6 +9,7 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
         tailwind.config = {
+            darkMode: 'class',
             theme: {
                 extend: {
                     colors: {
@@ -64,9 +65,9 @@
     
     {% block head %}{% endblock %}
 </head>
-<body class="bg-gray-50 text-gray-900 min-h-screen">
+<body class="bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100 min-h-screen" x-data="{ darkMode: localStorage.getItem('darkMode') === 'true' }" x-init="$watch('darkMode', val => localStorage.setItem('darkMode', val)); if(darkMode) document.documentElement.classList.add('dark')" :class="{ 'dark': darkMode }">
     <!-- Navigation -->
-    <nav class="bg-white border-b border-gray-200 sticky top-0 z-50">
+    <nav class="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 sticky top-0 z-50">
         <div class="max-w-6xl mx-auto px-4">
             <div class="flex items-center justify-between h-14">
                 <a href="/" class="flex items-center space-x-2">
@@ -77,12 +78,22 @@
                     <span class="font-semibold text-lg">arXiv Library</span>
                 </a>
                 <div class="flex items-center space-x-6">
-                    <a href="/" class="text-gray-600 hover:text-gray-900 text-sm {% block nav_add %}{% endblock %}">
+                    <a href="/" class="text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white text-sm {% block nav_add %}{% endblock %}">
                         Add Paper
                     </a>
-                    <a href="/library" class="text-gray-600 hover:text-gray-900 text-sm {% block nav_library %}{% endblock %}">
+                    <a href="/library" class="text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white text-sm {% block nav_library %}{% endblock %}">
                         Library
                     </a>
+                    <!-- Dark mode toggle -->
+                    <button @click="darkMode = !darkMode; document.documentElement.classList.toggle('dark')"
+                            class="p-2 rounded-lg text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700">
+                        <svg x-show="!darkMode" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/>
+                        </svg>
+                        <svg x-show="darkMode" x-cloak class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/>
+                        </svg>
+                    </button>
                 </div>
             </div>
         </div>
@@ -110,7 +121,7 @@
                      'bg-red-600': toast.type === 'error',
                      'bg-blue-600': toast.type === 'info'
                  }"
-                 class="text-white px-4 py-2 rounded-lg shadow-lg text-sm">
+                 class="text-white px-4 py-2 rounded-lg shadow-lg text-sm dark:ring-1 dark:ring-white/10">
                 <span x-text="toast.message"></span>
             </div>
         </template>
