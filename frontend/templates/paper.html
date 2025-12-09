@@ -1,0 +1,378 @@
+{% extends "base.html" %}
+
+{% block title %}Paper - arXiv Library{% endblock %}
+
+{% block content %}
+<div x-data="paperDetail('{{ arxiv_id }}')" x-init="init()">
+    
+    <!-- Loading State -->
+    <div x-show="loading" class="text-center py-12">
+        <svg class="animate-spin h-8 w-8 mx-auto text-gray-400" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"/>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/>
+        </svg>
+    </div>
+    
+    <!-- Not Found -->
+    <div x-show="!loading && !paper" class="text-center py-12">
+        <p class="text-gray-500 mb-4">Paper not found</p>
+        <a href="/library" class="text-arxiv-red hover:underline">Back to library</a>
+    </div>
+    
+    <!-- Paper Content -->
+    <template x-if="paper">
+        <div>
+            <!-- Back link -->
+            <a href="/library" class="inline-flex items-center text-sm text-gray-500 hover:text-gray-700 mb-6">
+                <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+                </svg>
+                Back to library
+            </a>
+            
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <!-- Main Content -->
+                <div class="lg:col-span-2 space-y-6">
+                    <!-- Paper Card -->
+                    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                        <!-- Title -->
+                        <h1 class="text-xl font-medium text-gray-900 mb-4"
+                            x-html="paper.title"
+                            x-effect="renderMath()"></h1>
+                        
+                        <!-- Authors -->
+                        <p class="text-gray-600 mb-4">
+                            <template x-for="(author, i) in paper.authors" :key="author">
+                                <span>
+                                    <span x-text="author"></span><span x-show="i < paper.authors.length - 1">, </span>
+                                </span>
+                            </template>
+                        </p>
+                        
+                        <!-- Meta -->
+                        <div class="flex flex-wrap gap-2 mb-6 text-sm">
+                            <span class="px-2 py-1 bg-gray-100 rounded text-gray-600" x-text="paper.arxiv_id"></span>
+                            <template x-for="cat in paper.categories" :key="cat">
+                                <span class="px-2 py-1 bg-blue-50 text-blue-700 rounded" x-text="cat"></span>
+                            </template>
+                            <span class="px-2 py-1 bg-gray-50 text-gray-500 rounded" 
+                                  x-text="'Published: ' + new Date(paper.published).toLocaleDateString()"></span>
+                        </div>
+                        
+                        <!-- Abstract -->
+                        <div class="prose prose-sm max-w-none">
+                            <h3 class="text-sm font-medium text-gray-500 uppercase tracking-wide mb-2">Abstract</h3>
+                            <p class="text-gray-700 leading-relaxed whitespace-pre-line"
+                               x-html="paper.abstract"
+                               x-effect="renderMath()"></p>
+                        </div>
+                        
+                        <!-- Links -->
+                        <div class="flex gap-4 mt-6 pt-6 border-t border-gray-100">
+                            <a :href="paper.arxiv_url" target="_blank"
+                               class="inline-flex items-center text-sm text-arxiv-red hover:underline">
+                                <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/>
+                                </svg>
+                                arXiv Page
+                            </a>
+                            <a :href="paper.pdf_url" target="_blank"
+                               class="inline-flex items-center text-sm text-arxiv-red hover:underline">
+                                <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                                </svg>
+                                Download PDF
+                            </a>
+                        </div>
+                    </div>
+                    
+                    <!-- Notes Section -->
+                    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                        <h3 class="text-sm font-medium text-gray-500 uppercase tracking-wide mb-3">Notes</h3>
+                        <div x-show="!editingNotes">
+                            <p x-show="paper.notes" class="text-gray-700 whitespace-pre-wrap" x-text="paper.notes"></p>
+                            <p x-show="!paper.notes" class="text-gray-400 italic">No notes yet</p>
+                            <button @click="editingNotes = true; notesInput = paper.notes || ''"
+                                    class="mt-3 text-sm text-arxiv-red hover:underline">
+                                <span x-text="paper.notes ? 'Edit notes' : 'Add notes'"></span>
+                            </button>
+                        </div>
+                        <div x-show="editingNotes" x-cloak>
+                            <textarea x-model="notesInput"
+                                      rows="4"
+                                      class="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm
+                                             focus:outline-none focus:ring-1 focus:ring-arxiv-red resize-none"></textarea>
+                            <div class="flex gap-2 mt-2">
+                                <button @click="saveNotes()"
+                                        class="px-3 py-1.5 bg-arxiv-red text-white text-sm rounded-lg">
+                                    Save
+                                </button>
+                                <button @click="editingNotes = false"
+                                        class="px-3 py-1.5 text-gray-600 text-sm">
+                                    Cancel
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Sidebar -->
+                <div class="space-y-6">
+                    <!-- Cover Image -->
+                    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                        <h3 class="text-sm font-medium text-gray-500 uppercase tracking-wide mb-3">Cover Image</h3>
+                        <div x-show="paper.cover_image" class="mb-3">
+                            <img :src="'/uploads/' + paper.cover_image" 
+                                 class="w-full rounded-lg"
+                                 alt="Paper cover">
+                            <button @click="deleteCover()"
+                                    class="mt-2 text-sm text-red-600 hover:underline">
+                                Remove cover
+                            </button>
+                        </div>
+                        <div x-show="!paper.cover_image">
+                            <label class="block">
+                                <div class="border-2 border-dashed border-gray-200 rounded-lg p-6 text-center cursor-pointer hover:border-gray-300 transition-colors">
+                                    <svg class="w-8 h-8 mx-auto text-gray-400 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                                    </svg>
+                                    <p class="text-sm text-gray-500">Click to upload</p>
+                                    <p class="text-xs text-gray-400 mt-1">JPG, PNG, GIF, WebP</p>
+                                </div>
+                                <input type="file" 
+                                       accept="image/jpeg,image/png,image/gif,image/webp"
+                                       @change="uploadCover($event)"
+                                       class="hidden">
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <!-- Organization -->
+                    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                        <!-- Starred -->
+                        <div class="flex items-center justify-between mb-6 pb-4 border-b border-gray-100">
+                            <span class="text-sm font-medium text-gray-700">Star this paper</span>
+                            <button @click="toggleStar()"
+                                    class="p-1.5 rounded-lg hover:bg-gray-100 transition-colors"
+                                    :class="paper.starred ? 'text-yellow-400' : 'text-gray-300'">
+                                <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 20 20">
+                                    <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/>
+                                </svg>
+                            </button>
+                        </div>
+                        
+                        <h3 class="text-sm font-medium text-gray-500 uppercase tracking-wide mb-3">Reading Status</h3>
+                        <div class="flex gap-2 mb-6">
+                            <button @click="setStatus('to-read')"
+                                    :class="paper.status === 'to-read' ? 'bg-yellow-500 text-white' : 'bg-gray-100 text-gray-700'"
+                                    class="px-3 py-1.5 rounded-full text-sm transition-colors">
+                                📚 To Read
+                            </button>
+                            <button @click="setStatus('read')"
+                                    :class="paper.status === 'read' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-700'"
+                                    class="px-3 py-1.5 rounded-full text-sm transition-colors">
+                                ✓ Read
+                            </button>
+                        </div>
+                        
+                        <h3 class="text-sm font-medium text-gray-500 uppercase tracking-wide mb-3">Shelves</h3>
+                        <div class="flex flex-wrap gap-2 mb-6">
+                            <template x-for="shelf in shelves" :key="shelf.id">
+                                <button @click="toggleShelf(shelf.id)"
+                                        :class="paper.shelves.includes(shelf.id) 
+                                            ? 'bg-arxiv-red text-white' 
+                                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'"
+                                        class="px-3 py-1.5 rounded-full text-sm transition-colors"
+                                        x-text="shelf.name">
+                                </button>
+                            </template>
+                        </div>
+                        
+                        <h3 class="text-sm font-medium text-gray-500 uppercase tracking-wide mb-3">Tags</h3>
+                        <div class="flex flex-wrap gap-2">
+                            <template x-for="tag in tags" :key="tag.name">
+                                <button @click="toggleTag(tag.name)"
+                                        :class="paper.tags.includes(tag.name) 
+                                            ? 'bg-purple-600 text-white' 
+                                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'"
+                                        class="px-3 py-1.5 rounded-full text-sm transition-colors"
+                                        x-text="tag.name">
+                                </button>
+                            </template>
+                        </div>
+                    </div>
+                    
+                    <!-- Danger Zone -->
+                    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                        <h3 class="text-sm font-medium text-gray-500 uppercase tracking-wide mb-3">Danger Zone</h3>
+                        <button @click="deletePaper()"
+                                class="w-full px-3 py-2 border border-red-200 text-red-600 rounded-lg text-sm hover:bg-red-50 transition-colors">
+                            Remove from Library
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </template>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function paperDetail(arxivId) {
+    return {
+        arxivId: arxivId,
+        paper: null,
+        loading: true,
+        
+        shelves: [],
+        tags: [],
+        
+        editingNotes: false,
+        notesInput: '',
+        
+        async init() {
+            await Promise.all([
+                this.loadPaper(),
+                this.loadShelvesAndTags()
+            ]);
+        },
+        
+        async loadPaper() {
+            try {
+                const res = await fetch(`/api/papers/${this.arxivId}`);
+                if (res.ok) {
+                    this.paper = await res.json();
+                }
+            } catch (e) {
+                console.error('Failed to load paper:', e);
+            } finally {
+                this.loading = false;
+                this.$nextTick(() => renderMath());
+            }
+        },
+        
+        async loadShelvesAndTags() {
+            const [shelvesRes, tagsRes] = await Promise.all([
+                fetch('/api/shelves'),
+                fetch('/api/tags')
+            ]);
+            this.shelves = await shelvesRes.json();
+            this.tags = await tagsRes.json();
+        },
+        
+        async updatePaper(data) {
+            try {
+                const res = await fetch(`/api/papers/${this.arxivId}`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+                if (res.ok) {
+                    this.paper = await res.json();
+                    this.$nextTick(() => renderMath());  // ADD THIS LINE
+                    return true;
+                }
+            } catch (e) {
+                showToast('Failed to update paper', 'error');
+            }
+            return false;
+        },
+        
+        async setStatus(status) {
+            const newStatus = this.paper.status === status ? '' : status;
+            if (await this.updatePaper({ status: newStatus })) {
+                showToast('Status updated', 'success');
+            }
+        },
+        
+        async toggleStar() {
+            if (await this.updatePaper({ starred: !this.paper.starred })) {
+                showToast(this.paper.starred ? 'Paper starred' : 'Star removed', 'success');
+            }
+        },
+        
+        async toggleShelf(shelfId) {
+            const shelves = this.paper.shelves.includes(shelfId)
+                ? this.paper.shelves.filter(s => s !== shelfId)
+                : [...this.paper.shelves, shelfId];
+            if (await this.updatePaper({ shelves })) {
+                showToast('Shelves updated', 'success');
+            }
+        },
+        
+        async toggleTag(tagName) {
+            const tags = this.paper.tags.includes(tagName)
+                ? this.paper.tags.filter(t => t !== tagName)
+                : [...this.paper.tags, tagName];
+            if (await this.updatePaper({ tags })) {
+                showToast('Tags updated', 'success');
+            }
+        },
+        
+        async saveNotes() {
+            if (await this.updatePaper({ notes: this.notesInput })) {
+                this.editingNotes = false;
+                showToast('Notes saved', 'success');
+            }
+        },
+        
+        async uploadCover(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            
+            const formData = new FormData();
+            formData.append('file', file);
+            
+            try {
+                const res = await fetch(`/api/papers/${this.arxivId}/cover`, {
+                    method: 'POST',
+                    body: formData
+                });
+                if (res.ok) {
+                    this.paper = await res.json();
+                    showToast('Cover uploaded', 'success');
+                } else {
+                    const data = await res.json();
+                    showToast(data.detail || 'Failed to upload cover', 'error');
+                }
+            } catch (e) {
+                showToast('Failed to upload cover', 'error');
+            }
+        },
+        
+        async deleteCover() {
+            try {
+                const res = await fetch(`/api/papers/${this.arxivId}/cover`, {
+                    method: 'DELETE'
+                });
+                if (res.ok) {
+                    this.paper = await res.json();
+                    showToast('Cover removed', 'success');
+                }
+            } catch (e) {
+                showToast('Failed to remove cover', 'error');
+            }
+        },
+        
+        async deletePaper() {
+            if (!confirm('Are you sure you want to remove this paper from your library?')) {
+                return;
+            }
+            
+            try {
+                const res = await fetch(`/api/papers/${this.arxivId}`, {
+                    method: 'DELETE'
+                });
+                if (res.ok) {
+                    showToast('Paper removed', 'success');
+                    window.location.href = '/library';
+                }
+            } catch (e) {
+                showToast('Failed to remove paper', 'error');
+            }
+        }
+    };
+}
+</script>
+{% endblock %}

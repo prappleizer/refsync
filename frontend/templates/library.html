@@ -1,0 +1,474 @@
+{% extends "base.html" %}
+
+{% block title %}Library - arXiv Library{% endblock %}
+{% block nav_library %}font-medium text-gray-900{% endblock %}
+
+{% block content %}
+<div x-data="library()" x-init="init()">
+    
+    <!-- Search and Filters Bar -->
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-4 mb-6">
+        <div class="flex flex-col md:flex-row gap-4">
+            <!-- Search Input -->
+            <div class="flex-1 relative">
+                <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+                </svg>
+                <input type="text"
+                       x-model="searchQuery"
+                       @input="filterPapers()"
+                       placeholder="Search titles, abstracts, authors, notes..."
+                       class="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg text-sm
+                              focus:outline-none focus:ring-2 focus:ring-arxiv-red/20 focus:border-arxiv-red">
+            </div>
+            
+            <!-- Filter Toggles -->
+            <div class="flex gap-2 flex-wrap">
+                <!-- Starred Filter -->
+                <button @click="filterStarred = !filterStarred; filterPapers()"
+                        :class="filterStarred ? 'bg-yellow-100 border-yellow-300 text-yellow-700' : 'border-gray-200 text-gray-600'"
+                        class="px-3 py-2 border rounded-lg text-sm flex items-center gap-1.5 hover:bg-gray-50">
+                    <svg class="w-4 h-4" :class="filterStarred ? 'text-yellow-500' : 'text-gray-400'" fill="currentColor" viewBox="0 0 20 20">
+                        <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/>
+                    </svg>
+                    <span>Starred</span>
+                </button>
+                
+                <!-- Shelf Filter -->
+                <div class="relative" x-data="{ open: false }">
+                    <button @click="open = !open"
+                            class="px-3 py-2 border border-gray-200 rounded-lg text-sm flex items-center gap-2 hover:bg-gray-50">
+                        <span>Shelf</span>
+                        <span x-show="filterShelf" class="bg-arxiv-red text-white text-xs px-1.5 rounded">1</span>
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                        </svg>
+                    </button>
+                    <div x-show="open" x-cloak @click.away="open = false"
+                         class="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg py-1 min-w-[150px] z-10">
+                        <button @click="filterShelf = null; filterPapers(); open = false"
+                                class="w-full px-3 py-2 text-left text-sm hover:bg-gray-50"
+                                :class="{ 'text-arxiv-red': !filterShelf }">
+                            All Shelves
+                        </button>
+                        <template x-for="shelf in shelves" :key="shelf.id">
+                            <button @click="filterShelf = shelf.id; filterPapers(); open = false"
+                                    class="w-full px-3 py-2 text-left text-sm hover:bg-gray-50"
+                                    :class="{ 'text-arxiv-red': filterShelf === shelf.id }"
+                                    x-text="shelf.name + ' (' + shelf.paper_count + ')'">
+                            </button>
+                        </template>
+                    </div>
+                </div>
+                
+                <!-- Tag Filter -->
+                <div class="relative" x-data="{ open: false }">
+                    <button @click="open = !open"
+                            class="px-3 py-2 border border-gray-200 rounded-lg text-sm flex items-center gap-2 hover:bg-gray-50">
+                        <span>Tags</span>
+                        <span x-show="filterTags.length" class="bg-purple-600 text-white text-xs px-1.5 rounded" x-text="filterTags.length"></span>
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                        </svg>
+                    </button>
+                    <div x-show="open" x-cloak @click.away="open = false"
+                         class="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg py-1 min-w-[150px] z-10 max-h-64 overflow-auto">
+                        <template x-for="tag in tags" :key="tag.name">
+                            <label class="flex items-center px-3 py-2 hover:bg-gray-50 cursor-pointer">
+                                <input type="checkbox" 
+                                       :checked="filterTags.includes(tag.name)"
+                                       @change="toggleFilterTag(tag.name)"
+                                       class="mr-2 rounded text-purple-600">
+                                <span class="text-sm" x-text="tag.name"></span>
+                                <span class="text-gray-400 text-xs ml-auto" x-text="'(' + tag.paper_count + ')'"></span>
+                            </label>
+                        </template>
+                    </div>
+                </div>
+                
+                <!-- Status Filter -->
+                <div class="relative" x-data="{ open: false }">
+                    <button @click="open = !open"
+                            class="px-3 py-2 border border-gray-200 rounded-lg text-sm flex items-center gap-2 hover:bg-gray-50">
+                        <span>Status</span>
+                        <span x-show="filterStatus" class="bg-green-600 text-white text-xs px-1.5 rounded">1</span>
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                        </svg>
+                    </button>
+                    <div x-show="open" x-cloak @click.away="open = false"
+                         class="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg py-1 min-w-[120px] z-10">
+                        <button @click="filterStatus = null; filterPapers(); open = false"
+                                class="w-full px-3 py-2 text-left text-sm hover:bg-gray-50">All</button>
+                        <button @click="filterStatus = 'to-read'; filterPapers(); open = false"
+                                class="w-full px-3 py-2 text-left text-sm hover:bg-gray-50">📚 To Read</button>
+                        <button @click="filterStatus = 'read'; filterPapers(); open = false"
+                                class="w-full px-3 py-2 text-left text-sm hover:bg-gray-50">✓ Read</button>
+                    </div>
+                </div>
+                
+                <!-- Clear Filters (always visible, styled when active) -->
+                <button @click="clearFilters()"
+                        :class="(searchQuery || filterShelf || filterTags.length || filterStatus || filterStarred) 
+                            ? 'text-gray-500 hover:text-gray-700' 
+                            : 'text-gray-300 cursor-default'"
+                        :disabled="!(searchQuery || filterShelf || filterTags.length || filterStatus || filterStarred)"
+                        class="px-3 py-2 text-sm">
+                    Clear all
+                </button>
+            </div>
+        </div>
+        
+        <!-- Second Row: Sort and Display Options -->
+        <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mt-4 pt-4 border-t border-gray-100">
+            <!-- Sort Options -->
+            <div class="flex items-center gap-2">
+                <span class="text-xs text-gray-500">Sort:</span>
+                <select x-model="sortBy" @change="filterPapers()"
+                        class="text-sm border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-arxiv-red">
+                    <option value="recent">Recent first</option>
+                    <option value="oldest">Oldest first</option>
+                    <option value="title">Title (A-Z)</option>
+                    <option value="author_last">Author last name (A-Z)</option>
+                    <option value="author_first">Author first name (A-Z)</option>
+                </select>
+            </div>
+            
+            <!-- Display Options -->
+            <div class="flex items-center gap-2">
+                <span class="text-xs text-gray-500">Size:</span>
+                <div class="flex border border-gray-200 rounded-lg overflow-hidden">
+                    <button @click="cardSize = 'small'" 
+                            :class="cardSize === 'small' ? 'bg-gray-100 text-gray-900' : 'text-gray-500 hover:bg-gray-50'"
+                            class="px-2.5 py-1.5 text-xs font-medium">S</button>
+                    <button @click="cardSize = 'medium'" 
+                            :class="cardSize === 'medium' ? 'bg-gray-100 text-gray-900' : 'text-gray-500 hover:bg-gray-50'"
+                            class="px-2.5 py-1.5 text-xs font-medium border-l border-r border-gray-200">M</button>
+                    <button @click="cardSize = 'large'" 
+                            :class="cardSize === 'large' ? 'bg-gray-100 text-gray-900' : 'text-gray-500 hover:bg-gray-50'"
+                            class="px-2.5 py-1.5 text-xs font-medium">L</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Results Count -->
+    <div class="mb-4 text-sm text-gray-500">
+        <span x-text="filteredPapers.length"></span> of <span x-text="allPapers.length"></span> papers
+        <span x-show="searchQuery || filterShelf || filterTags.length || filterStatus || filterStarred">
+            (filtered)
+        </span>
+    </div>
+    
+    <!-- Loading State -->
+    <div x-show="loading" class="text-center py-12">
+        <svg class="animate-spin h-8 w-8 mx-auto text-gray-400" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"/>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/>
+        </svg>
+    </div>
+    
+    <!-- Empty State -->
+    <div x-show="!loading && allPapers.length === 0" class="text-center py-12">
+        <svg class="w-16 h-16 mx-auto text-gray-300 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" 
+                  d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/>
+        </svg>
+        <p class="text-gray-500 mb-4">Your library is empty</p>
+        <a href="/" class="text-arxiv-red hover:underline text-sm">Add your first paper</a>
+    </div>
+    
+    <!-- No Results State -->
+    <div x-show="!loading && allPapers.length > 0 && filteredPapers.length === 0" class="text-center py-12">
+        <p class="text-gray-500 mb-4">No papers match your filters</p>
+        <button @click="clearFilters()" class="text-arxiv-red hover:underline text-sm">Clear filters</button>
+    </div>
+    
+    <!-- Papers Grid -->
+    <div x-show="!loading && filteredPapers.length > 0" 
+         :class="{
+             'grid-cols-1 md:grid-cols-2 lg:grid-cols-3': cardSize === 'small' || cardSize === 'medium',
+             'grid-cols-1 lg:grid-cols-2': cardSize === 'large'
+         }"
+         class="grid gap-4">
+        <template x-for="paper in filteredPapers" :key="paper.arxiv_id">
+            <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden hover:shadow-md transition-shadow">
+                <!-- Cover Image -->
+                <template x-if="paper.cover_image">
+                    <div :class="{
+                             'h-32': cardSize === 'small',
+                             'h-48': cardSize === 'medium',
+                             'h-56': cardSize === 'large'
+                         }"
+                         class="bg-gray-100 overflow-hidden">
+                        <img :src="'/uploads/' + paper.cover_image" 
+                             class="w-full h-full object-cover"
+                             alt="Paper cover">
+                    </div>
+                </template>
+                
+                <!-- Content -->
+                <div class="p-4">
+                    <!-- Top row: Status + Star -->
+                    <div class="flex items-center justify-between mb-2">
+                        <div class="flex gap-2">
+                            <span x-show="paper.status === 'to-read'" 
+                                  class="text-xs px-2 py-0.5 bg-yellow-100 text-yellow-700 rounded">📚 To Read</span>
+                            <span x-show="paper.status === 'read'" 
+                                  class="text-xs px-2 py-0.5 bg-green-100 text-green-700 rounded">✓ Read</span>
+                        </div>
+                        <!-- Star indicator -->
+                        <button @click.prevent="toggleStar(paper)" 
+                                class="p-1 -m-1 hover:scale-110 transition-transform"
+                                :class="paper.starred ? 'text-yellow-400' : 'text-gray-300 hover:text-yellow-400'">
+                            <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                                <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/>
+                            </svg>
+                        </button>
+                    </div>
+                    
+                    <!-- Title -->
+                    <a :href="'/paper/' + paper.arxiv_id"
+                       class="block text-sm font-medium text-gray-900 hover:text-arxiv-red mb-2"
+                       :class="cardSize === 'small' ? 'line-clamp-2' : 'line-clamp-3'"
+                       x-html="paper.title"
+                       x-effect="renderMath()"></a>
+                    
+                    <!-- Authors -->
+                    <p class="text-xs text-gray-500 mb-2 line-clamp-1">
+                        <span x-text="paper.authors.slice(0, 3).join(', ')"></span>
+                        <span x-show="paper.authors.length > 3">...</span>
+                    </p>
+                    
+                    <!-- Hidden searchable content -->
+                    <div class="hidden" x-text="paper.abstract"></div>
+                    <div class="hidden" x-text="paper.notes || ''"></div>
+                    
+                    <!-- Tags -->
+                    <div class="flex flex-wrap gap-1 mb-3">
+                        <template x-for="tag in paper.tags.slice(0, 3)" :key="tag">
+                            <span class="text-xs px-2 py-0.5 bg-purple-50 text-purple-700 rounded"
+                                  x-text="tag"></span>
+                        </template>
+                        <span x-show="paper.tags.length > 3" 
+                              class="text-xs px-2 py-0.5 bg-gray-100 text-gray-500 rounded"
+                              x-text="'+' + (paper.tags.length - 3)"></span>
+                    </div>
+                    
+                    <!-- Footer -->
+                    <div class="flex items-center justify-between text-xs text-gray-400">
+                        <span x-text="paper.arxiv_id"></span>
+                        <div class="flex gap-2">
+                            <a :href="paper.arxiv_url" target="_blank" class="hover:text-arxiv-red">arXiv</a>
+                            <a :href="paper.pdf_url" target="_blank" class="hover:text-arxiv-red">PDF</a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </template>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function library() {
+    return {
+        allPapers: [],
+        filteredPapers: [],
+        loading: true,
+        
+        // Filters
+        searchQuery: '',
+        filterShelf: null,
+        filterTags: [],
+        filterStatus: null,
+        filterStarred: false,
+        
+        // Sort & Display
+        sortBy: 'recent',
+        cardSize: 'small',
+        
+        // Reference data
+        shelves: [],
+        tags: [],
+        
+        async init() {
+            // Load saved preferences
+            this.cardSize = localStorage.getItem('libraryCardSize') || 'small';
+            this.sortBy = localStorage.getItem('librarySortBy') || 'recent';
+            
+            // Watch for changes to save preferences
+            this.$watch('cardSize', (val) => localStorage.setItem('libraryCardSize', val));
+            this.$watch('sortBy', (val) => localStorage.setItem('librarySortBy', val));
+            
+            await Promise.all([
+                this.loadShelvesAndTags(),
+                this.loadAllPapers()
+            ]);
+        },
+        
+        async loadShelvesAndTags() {
+            const [shelvesRes, tagsRes] = await Promise.all([
+                fetch('/api/shelves'),
+                fetch('/api/tags')
+            ]);
+            this.shelves = await shelvesRes.json();
+            this.tags = await tagsRes.json();
+        },
+        
+        async loadAllPapers() {
+            this.loading = true;
+            try {
+                const res = await fetch('/api/papers?limit=1000');
+                this.allPapers = await res.json();
+                this.filterPapers();
+            } catch (e) {
+                showToast('Failed to load papers', 'error');
+            } finally {
+                this.loading = false;
+                this.$nextTick(() => renderMath());
+            }
+        },
+        
+        filterPapers() {
+            let papers = this.allPapers;
+            
+            // Text search
+            if (this.searchQuery) {
+                const query = this.searchQuery.toLowerCase();
+                papers = papers.filter(paper => {
+                    const searchable = [
+                        paper.title,
+                        paper.abstract,
+                        paper.authors.join(' '),
+                        paper.notes || '',
+                        paper.arxiv_id,
+                        paper.tags.join(' ')
+                    ].join(' ').toLowerCase();
+                    return searchable.includes(query);
+                });
+            }
+            
+            // Starred filter
+            if (this.filterStarred) {
+                papers = papers.filter(p => p.starred);
+            }
+            
+            // Shelf filter
+            if (this.filterShelf) {
+                papers = papers.filter(p => p.shelves.includes(this.filterShelf));
+            }
+            
+            // Tag filter
+            if (this.filterTags.length) {
+                papers = papers.filter(p => 
+                    this.filterTags.every(tag => p.tags.includes(tag))
+                );
+            }
+            
+            // Status filter
+            if (this.filterStatus) {
+                papers = papers.filter(p => p.status === this.filterStatus);
+            }
+            
+            // Sort (starred always first, then by selected sort)
+            papers = this.sortPapers(papers);
+            
+            this.filteredPapers = papers;
+            this.$nextTick(() => renderMath());
+        },
+        
+        sortPapers(papers) {
+            // Extract last name - handles:
+            // "John Smith" -> "smith"
+            // "John A. Smith" -> "smith"  
+            // "John Smith Jr." -> "smith" (ignores suffixes)
+            // "María García López" -> "lópez" (takes last word)
+            const getLastName = (author) => {
+                if (!author) return '';
+                const suffixes = ['jr', 'jr.', 'sr', 'sr.', 'ii', 'iii', 'iv', 'phd', 'md'];
+                const parts = author.trim().split(/\s+/);
+                // Work backwards to find last name (skip suffixes)
+                for (let i = parts.length - 1; i >= 0; i--) {
+                    const part = parts[i].toLowerCase().replace(/[.,]/g, '');
+                    if (!suffixes.includes(part)) {
+                        return part;
+                    }
+                }
+                return parts[parts.length - 1].toLowerCase();
+            };
+            
+            const getFirstName = (author) => {
+                if (!author) return '';
+                const parts = author.trim().split(/\s+/);
+                return parts[0].toLowerCase();
+            };
+            
+            const sorted = [...papers].sort((a, b) => {
+                // Starred papers always first
+                if (a.starred && !b.starred) return -1;
+                if (!a.starred && b.starred) return 1;
+                
+                // Then by selected sort
+                switch (this.sortBy) {
+                    case 'recent':
+                        return new Date(b.added_at) - new Date(a.added_at);
+                    case 'oldest':
+                        return new Date(a.added_at) - new Date(b.added_at);
+                    case 'title':
+                        return a.title.toLowerCase().localeCompare(b.title.toLowerCase());
+                    case 'author_last':
+                        const aLast = a.authors[0] ? getLastName(a.authors[0]) : '';
+                        const bLast = b.authors[0] ? getLastName(b.authors[0]) : '';
+                        return aLast.localeCompare(bLast);
+                    case 'author_first':
+                        const aFirst = a.authors[0] ? getFirstName(a.authors[0]) : '';
+                        const bFirst = b.authors[0] ? getFirstName(b.authors[0]) : '';
+                        return aFirst.localeCompare(bFirst);
+                    default:
+                        return 0;
+                }
+            });
+            
+            return sorted;
+        },
+        
+        async toggleStar(paper) {
+            const newStarred = !paper.starred;
+            try {
+                const res = await fetch(`/api/papers/${paper.arxiv_id}`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ starred: newStarred })
+                });
+                if (res.ok) {
+                    paper.starred = newStarred;
+                    this.filterPapers(); // Re-sort
+                }
+            } catch (e) {
+                showToast('Failed to update star', 'error');
+            }
+        },
+        
+        toggleFilterTag(name) {
+            if (this.filterTags.includes(name)) {
+                this.filterTags = this.filterTags.filter(t => t !== name);
+            } else {
+                this.filterTags.push(name);
+            }
+            this.filterPapers();
+        },
+        
+        clearFilters() {
+            this.searchQuery = '';
+            this.filterShelf = null;
+            this.filterTags = [];
+            this.filterStatus = null;
+            this.filterStarred = false;
+            this.filterPapers();
+        }
+    };
+}
+</script>
+{% endblock %}

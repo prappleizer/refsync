@@ -1,0 +1,435 @@
+{% extends "base.html" %}
+
+{% block nav_add %}font-medium text-gray-900{% endblock %}
+
+{% block content %}
+<div class="max-w-2xl mx-auto" x-data="addPaper()">
+    <!-- Header -->
+    <div class="text-center mb-8">
+        <h1 class="text-2xl font-light text-gray-800 mb-2">Add to Your Library</h1>
+        <p class="text-gray-500 text-sm">Paste an arXiv link or ID to add a paper</p>
+    </div>
+
+    <!-- Add Paper Card -->
+    <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden transition-all duration-300"
+         :class="{ 'ring-2 ring-arxiv-red/20': paper }">
+        
+        <!-- Input Section -->
+        <div class="p-6">
+            <form @submit.prevent="fetchPaper" class="flex gap-3">
+                <input type="text"
+                       x-model="arxivUrl"
+                       placeholder="https://arxiv.org/abs/2301.07041 or just 2301.07041"
+                       class="flex-1 px-4 py-2.5 border border-gray-200 rounded-lg text-sm
+                              focus:outline-none focus:ring-2 focus:ring-arxiv-red/20 focus:border-arxiv-red
+                              placeholder:text-gray-400"
+                       :disabled="loading">
+                <button type="submit"
+                        :disabled="loading || !arxivUrl.trim()"
+                        class="px-5 py-2.5 bg-arxiv-red text-white rounded-lg text-sm font-medium
+                               hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed
+                               transition-colors flex items-center gap-2">
+                    <template x-if="loading">
+                        <svg class="animate-spin h-4 w-4" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"/>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/>
+                        </svg>
+                    </template>
+                    <span x-text="loading ? 'Fetching...' : 'Fetch'"></span>
+                </button>
+            </form>
+            
+            <!-- Error message -->
+            <p x-show="error" x-text="error" x-cloak
+               class="mt-3 text-sm text-red-600"></p>
+        </div>
+
+        <!-- Paper Preview (shown after fetch) -->
+        <template x-if="paper">
+            <div x-transition:enter="transition ease-out duration-300"
+                 x-transition:enter-start="opacity-0"
+                 x-transition:enter-end="opacity-100">
+                
+                <!-- Divider -->
+                <div class="border-t border-gray-100"></div>
+                
+                <!-- Paper Info -->
+                <div class="p-6 space-y-4">
+                    <!-- Title -->
+                    <h2 class="text-lg font-medium text-gray-900 leading-snug"
+                        x-html="paper.title"
+                        x-effect="renderMath()"></h2>
+                    
+                    <!-- Authors -->
+                    <p class="text-sm text-gray-600">
+                        <span x-text="paper.authors.slice(0, 5).join(', ')"></span>
+                        <span x-show="paper.authors.length > 5" class="text-gray-400">
+                            +<span x-text="paper.authors.length - 5"></span> more
+                        </span>
+                    </p>
+                    
+                    <!-- Abstract (collapsible) -->
+                    <div x-data="{ expanded: false }">
+                        <div class="text-sm text-gray-700 leading-relaxed"
+                             :class="{ 'line-clamp-3': !expanded }"
+                             x-html="paper.abstract"
+                             x-effect="renderMath()"></div>
+                        <button @click="expanded = !expanded"
+                                class="text-xs text-arxiv-red hover:underline mt-1">
+                            <span x-text="expanded ? 'Show less' : 'Show more'"></span>
+                        </button>
+                    </div>
+                    
+                    <!-- Meta info -->
+                    <div class="flex flex-wrap gap-2 text-xs">
+                        <span class="px-2 py-1 bg-gray-100 rounded text-gray-600"
+                              x-text="paper.arxiv_id"></span>
+                        <template x-for="cat in paper.categories.slice(0, 3)" :key="cat">
+                            <span class="px-2 py-1 bg-blue-50 text-blue-700 rounded"
+                                  x-text="cat"></span>
+                        </template>
+                    </div>
+                    
+                    <!-- Links -->
+                    <div class="flex gap-4 text-sm">
+                        <a :href="paper.arxiv_url" target="_blank"
+                           class="text-arxiv-red hover:underline">arXiv Page</a>
+                        <a :href="paper.pdf_url" target="_blank"
+                           class="text-arxiv-red hover:underline">PDF</a>
+                    </div>
+                </div>
+                
+                <!-- Divider -->
+                <div class="border-t border-gray-100"></div>
+                
+                <!-- Organization Section -->
+                <div class="p-6 bg-gray-50 space-y-4">
+                    <!-- Shelves -->
+                    <div>
+                        <label class="block text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">
+                            Add to Shelf
+                        </label>
+                        <div class="flex flex-wrap gap-2">
+                            <template x-for="shelf in shelves" :key="shelf.id">
+                                <button @click="toggleShelf(shelf.id)"
+                                        :class="selectedShelves.includes(shelf.id) 
+                                            ? 'bg-arxiv-red text-white' 
+                                            : 'bg-white text-gray-700 hover:bg-gray-100'"
+                                        class="px-3 py-1.5 rounded-full text-sm border border-gray-200 transition-colors">
+                                    <span x-text="shelf.name"></span>
+                                </button>
+                            </template>
+                            <!-- New shelf input -->
+                            <div x-show="!showNewShelf" x-cloak>
+                                <button @click="showNewShelf = true"
+                                        class="px-3 py-1.5 rounded-full text-sm border border-dashed border-gray-300 
+                                               text-gray-500 hover:border-gray-400 hover:text-gray-600">
+                                    + New Shelf
+                                </button>
+                            </div>
+                            <div x-show="showNewShelf" x-cloak class="flex gap-2">
+                                <input type="text" x-model="newShelfName" 
+                                       placeholder="Shelf name"
+                                       @keyup.enter="createShelf"
+                                       @keyup.escape="showNewShelf = false; newShelfName = ''"
+                                       class="px-3 py-1 text-sm border border-gray-200 rounded-full
+                                              focus:outline-none focus:ring-1 focus:ring-arxiv-red">
+                                <button @click="createShelf" 
+                                        class="px-3 py-1 bg-green-600 text-white text-sm rounded-full">
+                                    Add
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Tags -->
+                    <div>
+                        <label class="block text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">
+                            Tags
+                        </label>
+                        <div class="flex flex-wrap gap-2">
+                            <template x-for="tag in tags" :key="tag.name">
+                                <button @click="toggleTag(tag.name)"
+                                        :class="selectedTags.includes(tag.name) 
+                                            ? 'bg-purple-600 text-white' 
+                                            : 'bg-white text-gray-700 hover:bg-gray-100'"
+                                        class="px-3 py-1.5 rounded-full text-sm border border-gray-200 transition-colors">
+                                    <span x-text="tag.name"></span>
+                                </button>
+                            </template>
+                            <!-- New tag input -->
+                            <div x-show="!showNewTag" x-cloak>
+                                <button @click="showNewTag = true"
+                                        class="px-3 py-1.5 rounded-full text-sm border border-dashed border-gray-300 
+                                               text-gray-500 hover:border-gray-400 hover:text-gray-600">
+                                    + New Tag
+                                </button>
+                            </div>
+                            <div x-show="showNewTag" x-cloak class="flex gap-2">
+                                <input type="text" x-model="newTagName" 
+                                       placeholder="Tag name"
+                                       @keyup.enter="createTag"
+                                       @keyup.escape="showNewTag = false; newTagName = ''"
+                                       class="px-3 py-1 text-sm border border-gray-200 rounded-full
+                                              focus:outline-none focus:ring-1 focus:ring-arxiv-red">
+                                <button @click="createTag" 
+                                        class="px-3 py-1 bg-purple-600 text-white text-sm rounded-full">
+                                    Add
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Reading Status -->
+                    <div>
+                        <label class="block text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">
+                            Reading Status
+                        </label>
+                        <div class="flex gap-2">
+                            <button @click="status = status === 'to-read' ? '' : 'to-read'"
+                                    :class="status === 'to-read' ? 'bg-yellow-500 text-white' : 'bg-white text-gray-700'"
+                                    class="px-3 py-1.5 rounded-full text-sm border border-gray-200 transition-colors">
+                                📚 To Read
+                            </button>
+                            <button @click="status = status === 'read' ? '' : 'read'"
+                                    :class="status === 'read' ? 'bg-green-600 text-white' : 'bg-white text-gray-700'"
+                                    class="px-3 py-1.5 rounded-full text-sm border border-gray-200 transition-colors">
+                                ✓ Read
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <!-- Notes -->
+                    <div>
+                        <label class="block text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">
+                            Notes (optional)
+                        </label>
+                        <textarea x-model="notes"
+                                  placeholder="Add a note about this paper..."
+                                  rows="2"
+                                  class="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg
+                                         focus:outline-none focus:ring-1 focus:ring-arxiv-red resize-none"></textarea>
+                    </div>
+                    
+                    <!-- Save Button -->
+                    <div class="pt-2">
+                        <button @click="savePaper"
+                                :disabled="saving"
+                                class="w-full py-2.5 bg-arxiv-red text-white rounded-lg font-medium
+                                       hover:bg-red-700 disabled:opacity-50 transition-colors">
+                            <span x-text="saving ? 'Saving...' : 'Add to Library'"></span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </template>
+    </div>
+    
+    <!-- Already in library notice -->
+    <div x-show="existingPaper" x-cloak
+         class="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+        <p class="text-sm text-blue-800">
+            This paper is already in your library.
+            <a :href="'/paper/' + existingPaper.arxiv_id" class="underline font-medium">View it here</a>
+        </p>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function addPaper() {
+    return {
+        arxivUrl: '',
+        loading: false,
+        error: '',
+        paper: null,
+        existingPaper: null,
+        
+        // Organization state
+        shelves: [],
+        tags: [],
+        selectedShelves: [],
+        selectedTags: [],
+        status: '',
+        notes: '',
+        
+        // New item inputs
+        showNewShelf: false,
+        showNewTag: false,
+        newShelfName: '',
+        newTagName: '',
+        
+        saving: false,
+        
+        async init() {
+            await this.loadShelvesAndTags();
+        },
+        
+        async loadShelvesAndTags() {
+            const [shelvesRes, tagsRes] = await Promise.all([
+                fetch('/api/shelves'),
+                fetch('/api/tags')
+            ]);
+            this.shelves = await shelvesRes.json();
+            this.tags = await tagsRes.json();
+        },
+        
+        async fetchPaper() {
+            this.loading = true;
+            this.error = '';
+            this.paper = null;
+            this.existingPaper = null;
+            
+            try {
+                const res = await fetch('/api/papers', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ arxiv_url: this.arxivUrl })
+                });
+                
+                if (res.status === 409) {
+                    // Paper already exists
+                    const data = await res.json();
+                    // Fetch the existing paper
+                    const parsed = this.arxivUrl.match(/(\d{4}\.\d{4,5})/);
+                    if (parsed) {
+                        const existingRes = await fetch(`/api/papers/${parsed[1]}`);
+                        if (existingRes.ok) {
+                            this.existingPaper = await existingRes.json();
+                        }
+                    }
+                    this.error = 'This paper is already in your library.';
+                    return;
+                }
+                
+                if (!res.ok) {
+                    const data = await res.json();
+                    throw new Error(data.detail || 'Failed to fetch paper');
+                }
+                
+                this.paper = await res.json();
+                
+                // Paper was added, now we need to show organization options
+                // Reset selection state
+                this.selectedShelves = [];
+                this.selectedTags = [];
+                this.status = '';
+                this.notes = '';
+                
+                // Trigger MathJax after DOM update
+                this.$nextTick(() => renderMath());
+                
+            } catch (e) {
+                this.error = e.message;
+            } finally {
+                this.loading = false;
+            }
+        },
+        
+        toggleShelf(id) {
+            if (this.selectedShelves.includes(id)) {
+                this.selectedShelves = this.selectedShelves.filter(s => s !== id);
+            } else {
+                this.selectedShelves.push(id);
+            }
+        },
+        
+        toggleTag(name) {
+            if (this.selectedTags.includes(name)) {
+                this.selectedTags = this.selectedTags.filter(t => t !== name);
+            } else {
+                this.selectedTags.push(name);
+            }
+        },
+        
+        async createShelf() {
+            if (!this.newShelfName.trim()) return;
+            
+            try {
+                const res = await fetch('/api/shelves', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name: this.newShelfName.trim() })
+                });
+                
+                if (res.ok) {
+                    const shelf = await res.json();
+                    this.shelves.push(shelf);
+                    this.selectedShelves.push(shelf.id);
+                    this.newShelfName = '';
+                    this.showNewShelf = false;
+                } else {
+                    const data = await res.json();
+                    showToast(data.detail || 'Failed to create shelf', 'error');
+                }
+            } catch (e) {
+                showToast('Failed to create shelf', 'error');
+            }
+        },
+        
+        async createTag() {
+            if (!this.newTagName.trim()) return;
+            
+            try {
+                const res = await fetch('/api/tags', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name: this.newTagName.trim() })
+                });
+                
+                if (res.ok) {
+                    const tag = await res.json();
+                    this.tags.push(tag);
+                    this.selectedTags.push(tag.name);
+                    this.newTagName = '';
+                    this.showNewTag = false;
+                } else {
+                    const data = await res.json();
+                    showToast(data.detail || 'Failed to create tag', 'error');
+                }
+            } catch (e) {
+                showToast('Failed to create tag', 'error');
+            }
+        },
+        
+        async savePaper() {
+            if (!this.paper) return;
+            
+            this.saving = true;
+            
+            try {
+                // Update paper with organization data
+                const res = await fetch(`/api/papers/${this.paper.arxiv_id}`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        shelves: this.selectedShelves,
+                        tags: this.selectedTags,
+                        status: this.status || '',
+                        notes: this.notes || null
+                    })
+                });
+                
+                if (res.ok) {
+                    showToast('Paper added to library!', 'success');
+                    // Reset form
+                    this.arxivUrl = '';
+                    this.paper = null;
+                    this.selectedShelves = [];
+                    this.selectedTags = [];
+                    this.status = '';
+                    this.notes = '';
+                } else {
+                    throw new Error('Failed to save paper');
+                }
+            } catch (e) {
+                showToast(e.message, 'error');
+            } finally {
+                this.saving = false;
+            }
+        }
+    };
+}
+</script>
+{% endblock %}
