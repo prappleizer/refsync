@@ -6,12 +6,12 @@
 <div class="max-w-2xl mx-auto" x-data="addPaper()">
     <!-- Header -->
     <div class="text-center mb-8">
-        <h1 class="text-2xl font-light text-gray-800 mb-2">Add to Your Library</h1>
-        <p class="text-gray-500 text-sm">Paste an arXiv link or ID to add a paper</p>
+        <h1 class="text-2xl font-light text-gray-800 dark:text-gray-200 mb-2">Add to Your Library</h1>
+        <p class="text-gray-500 dark:text-gray-400 text-sm">Paste an arXiv link or ID to add a paper</p>
     </div>
 
     <!-- Add Paper Card -->
-    <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden transition-all duration-300"
+    <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden transition-all duration-300"
          :class="{ 'ring-2 ring-arxiv-red/20': paper }">
         
         <!-- Input Section -->
@@ -20,9 +20,10 @@
                 <input type="text"
                        x-model="arxivUrl"
                        placeholder="https://arxiv.org/abs/2301.07041 or just 2301.07041"
-                       class="flex-1 px-4 py-2.5 border border-gray-200 rounded-lg text-sm
+                       class="flex-1 px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-lg text-sm
+                              bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100
                               focus:outline-none focus:ring-2 focus:ring-arxiv-red/20 focus:border-arxiv-red
-                              placeholder:text-gray-400"
+                              placeholder:text-gray-400 dark:placeholder:text-gray-500"
                        :disabled="loading">
                 <button type="submit"
                         :disabled="loading || !arxivUrl.trim()"
@@ -41,7 +42,7 @@
             
             <!-- Error message -->
             <p x-show="error" x-text="error" x-cloak
-               class="mt-3 text-sm text-red-600"></p>
+               class="mt-3 text-sm text-red-600 dark:text-red-400"></p>
         </div>
 
         <!-- Paper Preview (shown after fetch) -->
@@ -51,26 +52,26 @@
                  x-transition:enter-end="opacity-100">
                 
                 <!-- Divider -->
-                <div class="border-t border-gray-100"></div>
+                <div class="border-t border-gray-100 dark:border-gray-700"></div>
                 
                 <!-- Paper Info -->
                 <div class="p-6 space-y-4">
                     <!-- Title -->
-                    <h2 class="text-lg font-medium text-gray-900 leading-snug"
+                    <h2 class="text-lg font-medium text-gray-900 dark:text-gray-100 leading-snug"
                         x-html="paper.title"
                         x-effect="renderMath()"></h2>
                     
                     <!-- Authors -->
-                    <p class="text-sm text-gray-600">
+                    <p class="text-sm text-gray-600 dark:text-gray-400">
                         <span x-text="paper.authors.slice(0, 5).join(', ')"></span>
-                        <span x-show="paper.authors.length > 5" class="text-gray-400">
+                        <span x-show="paper.authors.length > 5" class="text-gray-400 dark:text-gray-500">
                             +<span x-text="paper.authors.length - 5"></span> more
                         </span>
                     </p>
                     
                     <!-- Abstract (collapsible) -->
                     <div x-data="{ expanded: false }">
-                        <div class="text-sm text-gray-700 leading-relaxed"
+                        <div class="text-sm text-gray-700 dark:text-gray-300 leading-relaxed"
                              :class="{ 'line-clamp-3': !expanded }"
                              x-html="paper.abstract"
                              x-effect="renderMath()"></div>
@@ -82,10 +83,10 @@
                     
                     <!-- Meta info -->
                     <div class="flex flex-wrap gap-2 text-xs">
-                        <span class="px-2 py-1 bg-gray-100 rounded text-gray-600"
+                        <span class="px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded text-gray-600 dark:text-gray-400"
                               x-text="paper.arxiv_id"></span>
                         <template x-for="cat in paper.categories.slice(0, 3)" :key="cat">
-                            <span class="px-2 py-1 bg-blue-50 text-blue-700 rounded"
+                            <span class="px-2 py-1 bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 rounded"
                                   x-text="cat"></span>
                         </template>
                     </div>
@@ -100,13 +101,13 @@
                 </div>
                 
                 <!-- Divider -->
-                <div class="border-t border-gray-100"></div>
+                <div class="border-t border-gray-100 dark:border-gray-700"></div>
                 
                 <!-- Organization Section -->
-                <div class="p-6 bg-gray-50 space-y-4">
+                <div class="p-6 bg-gray-50 dark:bg-gray-800/50 space-y-4">
                     <!-- Shelves -->
                     <div>
-                        <label class="block text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">
+                        <label class="block text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">
                             Add to Shelf
                         </label>
                         <div class="flex flex-wrap gap-2">
@@ -114,16 +115,16 @@
                                 <button @click="toggleShelf(shelf.id)"
                                         :class="selectedShelves.includes(shelf.id) 
                                             ? 'bg-arxiv-red text-white' 
-                                            : 'bg-white text-gray-700 hover:bg-gray-100'"
-                                        class="px-3 py-1.5 rounded-full text-sm border border-gray-200 transition-colors">
+                                            : 'bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600'"
+                                        class="px-3 py-1.5 rounded-full text-sm border border-gray-200 dark:border-gray-600 transition-colors">
                                     <span x-text="shelf.name"></span>
                                 </button>
                             </template>
                             <!-- New shelf input -->
                             <div x-show="!showNewShelf" x-cloak>
                                 <button @click="showNewShelf = true"
-                                        class="px-3 py-1.5 rounded-full text-sm border border-dashed border-gray-300 
-                                               text-gray-500 hover:border-gray-400 hover:text-gray-600">
+                                        class="px-3 py-1.5 rounded-full text-sm border border-dashed border-gray-300 dark:border-gray-600 
+                                               text-gray-500 dark:text-gray-400 hover:border-gray-400 dark:hover:border-gray-500 hover:text-gray-600 dark:hover:text-gray-300">
                                     + New Shelf
                                 </button>
                             </div>
@@ -132,7 +133,8 @@
                                        placeholder="Shelf name"
                                        @keyup.enter="createShelf"
                                        @keyup.escape="showNewShelf = false; newShelfName = ''"
-                                       class="px-3 py-1 text-sm border border-gray-200 rounded-full
+                                       class="px-3 py-1 text-sm border border-gray-200 dark:border-gray-600 rounded-full
+                                              bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100
                                               focus:outline-none focus:ring-1 focus:ring-arxiv-red">
                                 <button @click="createShelf" 
                                         class="px-3 py-1 bg-green-600 text-white text-sm rounded-full">
@@ -144,7 +146,7 @@
                     
                     <!-- Tags -->
                     <div>
-                        <label class="block text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">
+                        <label class="block text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">
                             Tags
                         </label>
                         <div class="flex flex-wrap gap-2">
@@ -152,16 +154,16 @@
                                 <button @click="toggleTag(tag.name)"
                                         :class="selectedTags.includes(tag.name) 
                                             ? 'bg-purple-600 text-white' 
-                                            : 'bg-white text-gray-700 hover:bg-gray-100'"
-                                        class="px-3 py-1.5 rounded-full text-sm border border-gray-200 transition-colors">
+                                            : 'bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600'"
+                                        class="px-3 py-1.5 rounded-full text-sm border border-gray-200 dark:border-gray-600 transition-colors">
                                     <span x-text="tag.name"></span>
                                 </button>
                             </template>
                             <!-- New tag input -->
                             <div x-show="!showNewTag" x-cloak>
                                 <button @click="showNewTag = true"
-                                        class="px-3 py-1.5 rounded-full text-sm border border-dashed border-gray-300 
-                                               text-gray-500 hover:border-gray-400 hover:text-gray-600">
+                                        class="px-3 py-1.5 rounded-full text-sm border border-dashed border-gray-300 dark:border-gray-600 
+                                               text-gray-500 dark:text-gray-400 hover:border-gray-400 dark:hover:border-gray-500 hover:text-gray-600 dark:hover:text-gray-300">
                                     + New Tag
                                 </button>
                             </div>
@@ -170,7 +172,8 @@
                                        placeholder="Tag name"
                                        @keyup.enter="createTag"
                                        @keyup.escape="showNewTag = false; newTagName = ''"
-                                       class="px-3 py-1 text-sm border border-gray-200 rounded-full
+                                       class="px-3 py-1 text-sm border border-gray-200 dark:border-gray-600 rounded-full
+                                              bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100
                                               focus:outline-none focus:ring-1 focus:ring-arxiv-red">
                                 <button @click="createTag" 
                                         class="px-3 py-1 bg-purple-600 text-white text-sm rounded-full">
@@ -182,18 +185,18 @@
                     
                     <!-- Reading Status -->
                     <div>
-                        <label class="block text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">
+                        <label class="block text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">
                             Reading Status
                         </label>
                         <div class="flex gap-2">
                             <button @click="status = status === 'to-read' ? '' : 'to-read'"
-                                    :class="status === 'to-read' ? 'bg-yellow-500 text-white' : 'bg-white text-gray-700'"
-                                    class="px-3 py-1.5 rounded-full text-sm border border-gray-200 transition-colors">
+                                    :class="status === 'to-read' ? 'bg-yellow-500 text-white' : 'bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300'"
+                                    class="px-3 py-1.5 rounded-full text-sm border border-gray-200 dark:border-gray-600 transition-colors">
                                 📚 To Read
                             </button>
                             <button @click="status = status === 'read' ? '' : 'read'"
-                                    :class="status === 'read' ? 'bg-green-600 text-white' : 'bg-white text-gray-700'"
-                                    class="px-3 py-1.5 rounded-full text-sm border border-gray-200 transition-colors">
+                                    :class="status === 'read' ? 'bg-green-600 text-white' : 'bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300'"
+                                    class="px-3 py-1.5 rounded-full text-sm border border-gray-200 dark:border-gray-600 transition-colors">
                                 ✓ Read
                             </button>
                         </div>
@@ -201,13 +204,15 @@
                     
                     <!-- Notes -->
                     <div>
-                        <label class="block text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">
+                        <label class="block text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">
                             Notes (optional)
                         </label>
                         <textarea x-model="notes"
                                   placeholder="Add a note about this paper..."
                                   rows="2"
-                                  class="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg
+                                  class="w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-lg
+                                         bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100
+                                         placeholder:text-gray-400 dark:placeholder:text-gray-500
                                          focus:outline-none focus:ring-1 focus:ring-arxiv-red resize-none"></textarea>
                     </div>
                     
@@ -227,8 +232,8 @@
     
     <!-- Already in library notice -->
     <div x-show="existingPaper" x-cloak
-         class="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-        <p class="text-sm text-blue-800">
+         class="mt-4 p-4 bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800 rounded-lg">
+        <p class="text-sm text-blue-800 dark:text-blue-300">
             This paper is already in your library.
             <a :href="'/paper/' + existingPaper.arxiv_id" class="underline font-medium">View it here</a>
         </p>
