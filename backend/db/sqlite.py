@@ -61,7 +61,15 @@ class SQLiteDatabase:
                 starred INTEGER DEFAULT 0,
                 notes TEXT,
                 cover_image TEXT,
-                added_at TEXT NOT NULL
+                added_at TEXT NOT NULL,
+                bibtex TEXT,
+                bibtex_source TEXT DEFAULT 'arxiv',
+                cite_key TEXT,
+                is_published INTEGER DEFAULT 0,
+                doi TEXT,
+                journal_ref TEXT,
+                ads_bibcode TEXT,
+                last_citation_sync TEXT
             );
             
             CREATE TABLE IF NOT EXISTS shelves (
@@ -134,6 +142,20 @@ class SQLitePaperRepository(PaperRepository):
             notes=row["notes"],
             cover_image=row["cover_image"],
             added_at=datetime.fromisoformat(row["added_at"]),
+            bibtex=row["bibtex"] if "bibtex" in row.keys() else None,
+            bibtex_source=row["bibtex_source"]
+            if "bibtex_source" in row.keys()
+            else "arxiv",
+            cite_key=row["cite_key"] if "cite_key" in row.keys() else None,
+            is_published=bool(row["is_published"])
+            if "is_published" in row.keys() and row["is_published"] is not None
+            else False,
+            doi=row["doi"] if "doi" in row.keys() else None,
+            journal_ref=row["journal_ref"] if "journal_ref" in row.keys() else None,
+            ads_bibcode=row["ads_bibcode"] if "ads_bibcode" in row.keys() else None,
+            last_citation_sync=datetime.fromisoformat(row["last_citation_sync"])
+            if "last_citation_sync" in row.keys() and row["last_citation_sync"]
+            else None,
         )
 
     async def create(self, paper: Paper) -> Paper:
@@ -142,8 +164,9 @@ class SQLitePaperRepository(PaperRepository):
             INSERT INTO papers (
                 arxiv_id, title, authors, abstract, categories,
                 published, updated, pdf_url, arxiv_url,
-                shelves, tags, status, starred, notes, cover_image, added_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                shelves, tags, status, starred, notes, cover_image, added_at,
+                bibtex, bibtex_source, cite_key, is_published, doi, journal_ref, ads_bibcode, last_citation_sync
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
             (
                 paper.arxiv_id,
@@ -162,6 +185,16 @@ class SQLitePaperRepository(PaperRepository):
                 paper.notes,
                 paper.cover_image,
                 paper.added_at.isoformat(),
+                paper.bibtex,
+                paper.bibtex_source,
+                paper.cite_key,
+                int(paper.is_published),
+                paper.doi,
+                paper.journal_ref,
+                paper.ads_bibcode,
+                paper.last_citation_sync.isoformat()
+                if paper.last_citation_sync
+                else None,
             ),
         )
         await self.db.conn.commit()

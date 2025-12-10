@@ -5,8 +5,9 @@ from typing import Optional
 import feedparser
 import httpx
 
-from backend.models import Paper
-from backend.services.latex import latex_to_text
+from ..models import Paper
+from .bibtex import generate_arxiv_bibtex, generate_cite_key
+from .latex import latex_to_text
 
 # Patterns to extract arXiv ID from various URL formats
 ARXIV_PATTERNS = [
@@ -61,7 +62,7 @@ async def fetch_arxiv_paper(url_or_id: str) -> Paper:
     # Normalize ID (remove version)
     base_id = normalize_arxiv_id(arxiv_id)
 
-    # Query arXiv API
+    # Query arXiv API (HTTPS required)
     api_url = f"https://export.arxiv.org/api/query?id_list={arxiv_id}"
 
     async with httpx.AsyncClient(follow_redirects=True) as client:
@@ -70,7 +71,7 @@ async def fetch_arxiv_paper(url_or_id: str) -> Paper:
                 api_url,
                 timeout=30.0,
                 headers={
-                    "User-Agent": "arXiv-Library/1.0 (Academic paper manager; mailto:imad.pasha@yale.edu)"
+                    "User-Agent": "arXiv-Library/1.0 (Academic paper management tool)"
                 },
             )
             response.raise_for_status()
@@ -122,7 +123,12 @@ async def fetch_arxiv_paper(url_or_id: str) -> Paper:
     arxiv_url = f"https://arxiv.org/abs/{clean_id}"
     pdf_url = f"https://arxiv.org/pdf/{clean_id}.pdf"
 
-    return Paper(
+    # Check for DOI/journal_ref in arXiv metadata (if author updated it)
+    doi = entry.get("arxiv_doi")
+    journal_ref = entry.get("arxiv_journal_ref")
+
+    # Create paper first (without bibtex - we'll add it after)
+    paper = Paper(
         arxiv_id=base_id,
         title=title,
         authors=authors,
@@ -133,4 +139,12 @@ async def fetch_arxiv_paper(url_or_id: str) -> Paper:
         pdf_url=pdf_url,
         arxiv_url=arxiv_url,
         added_at=datetime.utcnow(),
+        doi=doi,
+        journal_ref=journal_ref,
     )
+
+    paper.cite_key = generate_cite_key(paper)
+    paper.bibtex = generate_arxiv_bibtex(paper, paper.cite_key)
+    paper.bibtex_source = "arxiv"
+
+    return paper

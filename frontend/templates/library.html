@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Library - PaperLib{% endblock %}
+{% block title %}Library - arXiv Library{% endblock %}
 {% block nav_library %}font-medium text-gray-900{% endblock %}
 
 {% block content %}
@@ -163,12 +163,26 @@
         </div>
     </div>
     
-    <!-- Results Count -->
-    <div class="mb-4 text-sm text-gray-500 dark:text-gray-400">
-        <span x-text="filteredPapers.length"></span> of <span x-text="allPapers.length"></span> papers
-        <span x-show="searchQuery || filterShelf || filterTags.length || filterStatus || filterStarred">
-            (filtered)
-        </span>
+    <!-- Results Count and Export -->
+    <div class="mb-4 flex items-center justify-between">
+        <div class="text-sm text-gray-500 dark:text-gray-400">
+            <span x-text="filteredPapers.length"></span> of <span x-text="allPapers.length"></span> papers
+            <span x-show="searchQuery || filterShelf || filterTags.length || filterStatus || filterStarred">
+                (filtered)
+            </span>
+        </div>
+        
+        <!-- Export BibTeX Button -->
+        <button @click="exportBibtex()"
+                x-show="filteredPapers.length > 0"
+                class="inline-flex items-center gap-2 px-3 py-1.5 text-sm text-gray-600 dark:text-gray-400 
+                       hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-700 
+                       rounded-lg transition-colors">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+            </svg>
+            Export BibTeX
+        </button>
     </div>
     
     <!-- Loading State -->
@@ -538,6 +552,34 @@ function library() {
             this.filterStatus = null;
             this.filterStarred = false;
             this.filterPapers();
+        },
+        
+        exportBibtex() {
+            // Gather bibtex from all filtered papers
+            const bibtexEntries = this.filteredPapers
+                .filter(p => p.bibtex)
+                .map(p => p.bibtex);
+            
+            if (bibtexEntries.length === 0) {
+                showToast('No citations available for selected papers', 'error');
+                return;
+            }
+            
+            const combined = bibtexEntries.join('\n\n');
+            const count = bibtexEntries.length;
+            
+            // Generate title based on filters
+            let title = 'Export BibTeX';
+            if (this.filterShelf) {
+                const shelf = this.shelves.find(s => s.id === this.filterShelf);
+                if (shelf) title = `BibTeX: ${shelf.name}`;
+            } else if (this.filterTags.length === 1) {
+                title = `BibTeX: ${this.filterTags[0]}`;
+            } else if (this.searchQuery) {
+                title = `BibTeX: "${this.searchQuery}"`;
+            }
+            
+            showBibtexModal(combined, title, count);
         },
         
         // Helper for list view - returns "LastName et al." or just "LastName"

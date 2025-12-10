@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block title %}PaperLib{% endblock %}</title>
+    <title>{% block title %}arXiv Library{% endblock %}</title>
     
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -75,7 +75,7 @@
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
                               d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/>
                     </svg>
-                    <span class="font-semibold text-lg">PaperLib</span>
+                    <span class="font-semibold text-lg">arXiv Library</span>
                 </a>
                 <div class="flex items-center space-x-6">
                     <a href="/" class="text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white text-sm {% block nav_add %}{% endblock %}">
@@ -83,6 +83,12 @@
                     </a>
                     <a href="/library" class="text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white text-sm {% block nav_library %}{% endblock %}">
                         Library
+                    </a>
+                    <a href="/settings" class="text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white text-sm {% block nav_settings %}{% endblock %}">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                        </svg>
                     </a>
                     <!-- Dark mode toggle -->
                     <button @click="darkMode = !darkMode; document.documentElement.classList.toggle('dark')"
@@ -98,6 +104,95 @@
             </div>
         </div>
     </nav>
+
+    <!-- BibTeX Export Modal -->
+    <div x-data="bibtexModal()" 
+         x-on:show-bibtex.window="open($event.detail)"
+         x-show="isOpen" 
+         x-cloak
+         class="fixed inset-0 z-50 overflow-y-auto"
+         aria-labelledby="modal-title" 
+         role="dialog" 
+         aria-modal="true">
+        
+        <!-- Backdrop -->
+        <div class="fixed inset-0 bg-black/50 transition-opacity" 
+             x-show="isOpen"
+             x-transition:enter="ease-out duration-200"
+             x-transition:enter-start="opacity-0"
+             x-transition:enter-end="opacity-100"
+             x-transition:leave="ease-in duration-150"
+             x-transition:leave-start="opacity-100"
+             x-transition:leave-end="opacity-0"
+             @click="close()"></div>
+        
+        <!-- Modal -->
+        <div class="flex min-h-full items-center justify-center p-4">
+            <div x-show="isOpen"
+                 x-transition:enter="ease-out duration-200"
+                 x-transition:enter-start="opacity-0 scale-95"
+                 x-transition:enter-end="opacity-100 scale-100"
+                 x-transition:leave="ease-in duration-150"
+                 x-transition:leave-start="opacity-100 scale-100"
+                 x-transition:leave-end="opacity-0 scale-95"
+                 class="relative bg-white dark:bg-gray-800 rounded-xl shadow-xl max-w-3xl w-full max-h-[80vh] flex flex-col"
+                 @click.away="close()">
+                
+                <!-- Header -->
+                <div class="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
+                    <h3 class="text-lg font-medium text-gray-900 dark:text-gray-100" x-text="title"></h3>
+                    <button @click="close()" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                        </svg>
+                    </button>
+                </div>
+                
+                <!-- Actions bar -->
+                <div class="flex items-center gap-3 p-4 border-b border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50">
+                    <!-- Copy button -->
+                    <button @click="copyToClipboard()"
+                            class="inline-flex items-center gap-2 px-3 py-1.5 bg-arxiv-red text-white text-sm rounded-lg hover:bg-red-700 transition-colors">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"/>
+                        </svg>
+                        Copy to Clipboard
+                    </button>
+                    
+                    <!-- Export/Save -->
+                    <div class="flex items-center gap-2 ml-auto">
+                        <input type="text" 
+                               x-model="filename"
+                               class="px-3 py-1.5 text-sm border border-gray-200 dark:border-gray-600 rounded-lg w-56
+                                      bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100
+                                      focus:outline-none focus:ring-1 focus:ring-arxiv-red"
+                               placeholder="filename.bib">
+                        <button @click="saveToFile()"
+                                class="inline-flex items-center gap-2 px-3 py-1.5 border border-gray-200 dark:border-gray-600 
+                                       text-gray-700 dark:text-gray-300 text-sm rounded-lg 
+                                       hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                            </svg>
+                            Save .bib
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- Content -->
+                <div class="flex-1 overflow-auto p-4">
+                    <pre class="text-sm font-mono text-gray-800 dark:text-gray-200 whitespace-pre-wrap bg-gray-50 dark:bg-gray-900 
+                                rounded-lg p-4 border border-gray-200 dark:border-gray-700 max-h-[50vh] overflow-auto"
+                         x-text="bibtex"></pre>
+                </div>
+                
+                <!-- Footer -->
+                <div class="p-4 border-t border-gray-200 dark:border-gray-700 text-right">
+                    <span class="text-xs text-gray-500 dark:text-gray-400" x-text="entryCount + ' ' + (entryCount === 1 ? 'entry' : 'entries')"></span>
+                </div>
+            </div>
+        </div>
+    </div>
 
     <!-- Main content -->
     <main class="max-w-6xl mx-auto px-4 py-8">
@@ -128,6 +223,63 @@
     </div>
 
     <script>
+        // BibTeX modal component
+        function bibtexModal() {
+            return {
+                isOpen: false,
+                bibtex: '',
+                title: 'Export BibTeX',
+                filename: '',
+                entryCount: 0,
+                
+                open(detail) {
+                    this.bibtex = detail.bibtex || '';
+                    this.title = detail.title || 'Export BibTeX';
+                    this.entryCount = detail.count || 1;
+                    
+                    // Generate default filename
+                    const now = new Date();
+                    const timestamp = now.toISOString().slice(0, 16).replace(/[-:T]/g, '').slice(0, 12);
+                    this.filename = detail.filename || `bibtex_export_${timestamp}.bib`;
+                    
+                    this.isOpen = true;
+                },
+                
+                close() {
+                    this.isOpen = false;
+                },
+                
+                async copyToClipboard() {
+                    try {
+                        await navigator.clipboard.writeText(this.bibtex);
+                        showToast('Copied to clipboard', 'success');
+                    } catch (e) {
+                        showToast('Failed to copy', 'error');
+                    }
+                },
+                
+                saveToFile() {
+                    const blob = new Blob([this.bibtex], { type: 'text/plain' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = this.filename.endsWith('.bib') ? this.filename : this.filename + '.bib';
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                    showToast('File saved', 'success');
+                }
+            };
+        }
+        
+        // Helper to show BibTeX modal
+        function showBibtexModal(bibtex, title, count, filename) {
+            window.dispatchEvent(new CustomEvent('show-bibtex', {
+                detail: { bibtex, title, count, filename }
+            }));
+        }
+        
         // Toast notification store
         function toastStore() {
             return {

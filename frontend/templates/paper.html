@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Paper - PaperLib{% endblock %}
+{% block title %}Paper - arXiv Library{% endblock %}
 
 {% block content %}
 <div x-data="paperDetail('{{ arxiv_id }}')" x-init="init()">
@@ -68,7 +68,7 @@
                         </div>
                         
                         <!-- Links -->
-                        <div class="flex gap-4 mt-6 pt-6 border-t border-gray-100 dark:border-gray-700">
+                        <div class="flex flex-wrap gap-4 mt-6 pt-6 border-t border-gray-100 dark:border-gray-700">
                             <a :href="paper.arxiv_url" target="_blank"
                                class="inline-flex items-center text-sm text-arxiv-red hover:underline">
                                 <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -83,6 +83,14 @@
                                 </svg>
                                 Download PDF
                             </a>
+                            <button @click="exportBibtex()"
+                                    x-show="paper.bibtex"
+                                    class="inline-flex items-center text-sm text-arxiv-red hover:underline">
+                                <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"/>
+                                </svg>
+                                Copy BibTeX
+                            </button>
                         </div>
                     </div>
                     
@@ -372,6 +380,18 @@ function paperDetail(arxivId) {
             } catch (e) {
                 showToast('Failed to remove paper', 'error');
             }
+        },
+        
+        exportBibtex() {
+            if (!this.paper || !this.paper.bibtex) {
+                showToast('No citation available', 'error');
+                return;
+            }
+            
+            const title = `BibTeX: ${this.paper.cite_key || this.paper.arxiv_id}`;
+            const filename = `${this.paper.cite_key || this.paper.arxiv_id}.bib`;
+            
+            showBibtexModal(this.paper.bibtex, title, 1, filename);
         }
     };
 }

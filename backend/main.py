@@ -5,14 +5,15 @@ from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from backend.config import settings
-from backend.db import (
+from .config import settings
+from .db import (
     SQLiteDatabase,
     SQLitePaperRepository,
     SQLiteShelfRepository,
     SQLiteTagRepository,
 )
-from backend.routers import papers, shelves, tags
+from .routers import papers, shelves, tags
+from .routers import settings as settings_router
 
 # Database instance
 db = SQLiteDatabase(settings.database_path)
@@ -52,6 +53,7 @@ templates = Jinja2Templates(directory=settings.templates_dir)
 app.include_router(papers.router)
 app.include_router(shelves.router)
 app.include_router(tags.router)
+app.include_router(settings_router.router)
 
 
 # Page routes
@@ -73,6 +75,12 @@ async def paper_detail(request: Request, arxiv_id: str):
     return templates.TemplateResponse(
         "paper.html", {"request": request, "arxiv_id": arxiv_id}
     )
+
+
+@app.get("/settings", response_class=HTMLResponse)
+async def settings_page(request: Request):
+    """Settings page"""
+    return templates.TemplateResponse("settings.html", {"request": request})
 
 
 if __name__ == "__main__":

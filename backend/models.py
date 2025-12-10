@@ -1,7 +1,8 @@
-from pydantic import BaseModel, Field
 from datetime import datetime
-from typing import Optional
 from enum import Enum
+from typing import Optional
+
+from pydantic import BaseModel, Field
 
 
 class ReadingStatus(str, Enum):
@@ -12,8 +13,10 @@ class ReadingStatus(str, Enum):
 
 # === Paper Models ===
 
+
 class PaperBase(BaseModel):
     """Core paper data from arXiv"""
+
     arxiv_id: str
     title: str
     authors: list[str]
@@ -27,11 +30,13 @@ class PaperBase(BaseModel):
 
 class PaperCreate(BaseModel):
     """Request to add a paper - just needs the URL"""
+
     arxiv_url: str
 
 
 class PaperUpdate(BaseModel):
     """User-editable paper metadata"""
+
     shelves: Optional[list[str]] = None
     tags: Optional[list[str]] = None
     status: Optional[ReadingStatus] = None
@@ -41,6 +46,7 @@ class PaperUpdate(BaseModel):
 
 class Paper(PaperBase):
     """Full paper model with user data"""
+
     shelves: list[str] = Field(default_factory=list)
     tags: list[str] = Field(default_factory=list)
     status: ReadingStatus = ReadingStatus.UNSET
@@ -48,12 +54,23 @@ class Paper(PaperBase):
     notes: Optional[str] = None
     cover_image: Optional[str] = None
     added_at: datetime = Field(default_factory=datetime.utcnow)
-    
+
+    # Citation fields
+    bibtex: Optional[str] = None
+    bibtex_source: str = "arxiv"  # "arxiv" | "ads"
+    cite_key: Optional[str] = None  # e.g., "McCallum:2025"
+    is_published: bool = False  # True if journal publication detected
+    doi: Optional[str] = None
+    journal_ref: Optional[str] = None
+    ads_bibcode: Optional[str] = None
+    last_citation_sync: Optional[datetime] = None
+
     class Config:
         from_attributes = True
 
 
 # === Shelf Models ===
+
 
 class ShelfBase(BaseModel):
     name: str
@@ -73,12 +90,13 @@ class Shelf(ShelfBase):
     id: str
     created_at: datetime = Field(default_factory=datetime.utcnow)
     paper_count: int = 0
-    
+
     class Config:
         from_attributes = True
 
 
 # === Tag Models ===
+
 
 class TagBase(BaseModel):
     name: str
@@ -91,12 +109,13 @@ class TagCreate(TagBase):
 
 class Tag(TagBase):
     paper_count: int = 0
-    
+
     class Config:
         from_attributes = True
 
 
 # === Search Models ===
+
 
 class SearchQuery(BaseModel):
     q: Optional[str] = None  # Full-text search
