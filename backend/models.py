@@ -42,6 +42,15 @@ class PaperUpdate(BaseModel):
     status: Optional[ReadingStatus] = None
     notes: Optional[str] = None
     starred: Optional[bool] = None
+    # Citation fields (updated by ADS sync)
+    bibtex: Optional[str] = None
+    bibtex_source: Optional[str] = None
+    cite_key: Optional[str] = None
+    is_published: Optional[bool] = None
+    doi: Optional[str] = None
+    journal_ref: Optional[str] = None
+    ads_bibcode: Optional[str] = None
+    last_citation_sync: Optional[str] = None  # ISO format string
 
 
 class Paper(PaperBase):

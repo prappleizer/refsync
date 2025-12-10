@@ -163,7 +163,7 @@
         </div>
     </div>
     
-    <!-- Results Count and Export -->
+    <!-- Results Count and Actions -->
     <div class="mb-4 flex items-center justify-between">
         <div class="text-sm text-gray-500 dark:text-gray-400">
             <span x-text="filteredPapers.length"></span> of <span x-text="allPapers.length"></span> papers
@@ -172,17 +172,32 @@
             </span>
         </div>
         
-        <!-- Export BibTeX Button -->
-        <button @click="exportBibtex()"
-                x-show="filteredPapers.length > 0"
-                class="inline-flex items-center gap-2 px-3 py-1.5 text-sm text-gray-600 dark:text-gray-400 
-                       hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-700 
-                       rounded-lg transition-colors">
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
-            </svg>
-            Export BibTeX
-        </button>
+        <div class="flex items-center gap-2">
+            <!-- Sync Citations Button -->
+            <button @click="syncCitations()"
+                    :disabled="syncing"
+                    x-show="allPapers.length > 0"
+                    class="inline-flex items-center gap-2 px-3 py-1.5 text-sm text-gray-600 dark:text-gray-400 
+                           hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-700 
+                           rounded-lg transition-colors disabled:opacity-50">
+                <svg :class="syncing ? 'animate-spin' : ''" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                </svg>
+                <span x-text="syncing ? 'Syncing...' : 'Sync with ADS'"></span>
+            </button>
+            
+            <!-- Export BibTeX Button -->
+            <button @click="exportBibtex()"
+                    x-show="filteredPapers.length > 0"
+                    class="inline-flex items-center gap-2 px-3 py-1.5 text-sm text-gray-600 dark:text-gray-400 
+                           hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-700 
+                           rounded-lg transition-colors">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                </svg>
+                Export BibTeX
+            </button>
+        </div>
     </div>
     
     <!-- Loading State -->
@@ -374,6 +389,9 @@ function library() {
         sortBy: 'recent',
         cardSize: 'small',
         
+        // Sync state
+        syncing: false,
+        
         // Reference data
         shelves: [],
         tags: [],
@@ -552,6 +570,32 @@ function library() {
             this.filterStatus = null;
             this.filterStarred = false;
             this.filterPapers();
+        },
+        
+        async syncCitations() {
+            if (this.syncing) return;
+            
+            this.syncing = true;
+            try {
+                const res = await fetch('/api/papers/sync-citations', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                
+                const data = await res.json();
+                
+                if (res.ok) {
+                    showToast(data.message, 'success');
+                    // Reload papers to get updated citation info
+                    await this.loadAllPapers();
+                } else {
+                    showToast(data.detail || 'Sync failed', 'error');
+                }
+            } catch (e) {
+                showToast('Failed to sync with ADS', 'error');
+            } finally {
+                this.syncing = false;
+            }
         },
         
         exportBibtex() {

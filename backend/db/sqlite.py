@@ -230,6 +230,31 @@ class SQLitePaperRepository(PaperRepository):
         if data.notes is not None:
             updates.append("notes = ?")
             values.append(data.notes)
+        # Citation fields
+        if data.bibtex is not None:
+            updates.append("bibtex = ?")
+            values.append(data.bibtex)
+        if data.bibtex_source is not None:
+            updates.append("bibtex_source = ?")
+            values.append(data.bibtex_source)
+        if data.cite_key is not None:
+            updates.append("cite_key = ?")
+            values.append(data.cite_key)
+        if data.is_published is not None:
+            updates.append("is_published = ?")
+            values.append(int(data.is_published))
+        if data.doi is not None:
+            updates.append("doi = ?")
+            values.append(data.doi)
+        if data.journal_ref is not None:
+            updates.append("journal_ref = ?")
+            values.append(data.journal_ref)
+        if data.ads_bibcode is not None:
+            updates.append("ads_bibcode = ?")
+            values.append(data.ads_bibcode)
+        if data.last_citation_sync is not None:
+            updates.append("last_citation_sync = ?")
+            values.append(data.last_citation_sync)
 
         if updates:
             values.append(arxiv_id)
