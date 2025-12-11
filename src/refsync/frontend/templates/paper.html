@@ -70,14 +70,14 @@
                         <!-- Links -->
                         <div class="flex flex-wrap gap-4 mt-6 pt-6 border-t border-gray-100 dark:border-gray-700">
                             <a :href="paper.arxiv_url" target="_blank"
-                               class="inline-flex items-center text-sm text-arxiv-red hover:underline">
+                               class="inline-flex items-center text-sm text-arxiv-red dark:text-red-400 hover:underline">
                                 <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/>
                                 </svg>
                                 arXiv Page
                             </a>
                             <a :href="paper.pdf_url" target="_blank"
-                               class="inline-flex items-center text-sm text-arxiv-red hover:underline">
+                               class="inline-flex items-center text-sm text-arxiv-red dark:text-red-400 hover:underline">
                                 <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
                                 </svg>
@@ -85,7 +85,7 @@
                             </a>
                             <button @click="exportBibtex()"
                                     x-show="paper.bibtex"
-                                    class="inline-flex items-center text-sm text-arxiv-red hover:underline">
+                                    class="inline-flex items-center text-sm text-arxiv-red dark:text-red-400 hover:underline">
                                 <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"/>
                                 </svg>
@@ -101,7 +101,7 @@
                             <p x-show="paper.notes" class="text-gray-700 dark:text-gray-300 whitespace-pre-wrap" x-text="paper.notes"></p>
                             <p x-show="!paper.notes" class="text-gray-400 dark:text-gray-500 italic">No notes yet</p>
                             <button @click="editingNotes = true; notesInput = paper.notes || ''"
-                                    class="mt-3 text-sm text-arxiv-red hover:underline">
+                                    class="mt-3 text-sm text-arxiv-red dark:text-red-400 hover:underline">
                                 <span x-text="paper.notes ? 'Edit notes' : 'Add notes'"></span>
                             </button>
                         </div>
