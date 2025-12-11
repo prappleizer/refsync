@@ -2,11 +2,12 @@
 __pycache__/
 *.py[codz]
 *$py.class
-
+.encryption_key
 # C extensions
 *.so
 .DS_Store
 **/.DS_Store
+**/__pycache__/
 # Distribution / packaging
 .Python
 build/
