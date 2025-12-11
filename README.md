@@ -15,14 +15,16 @@ A citation manager for astronomers with seamless NASA ADS integration.
 
 ## Installation
 
-```bash
-pip install refsync
+Install from source:
+
+Recommended: create an environment: 
+```
+mamba create -n refsync pip
+mamba activate refsync
 ```
 
-Or install from source:
-
 ```bash
-git clone https://github.com/imad-pasha/refsync.git
+git clone https://github.com/prappleizer/refsync.git
 cd refsync
 pip install -e .
 ```
@@ -52,6 +54,7 @@ By default, RefSync stores data in `~/.refsync/`. You can change this:
 export REFSYNC_DATA_DIR=/path/to/your/data
 refsync
 ```
+(or update your shell profile for permanent changes).
 
 ### NASA ADS API Key
 
