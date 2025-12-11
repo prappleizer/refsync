@@ -273,7 +273,9 @@
          }"
          class="grid gap-4">
         <template x-for="paper in filteredPapers" :key="paper.arxiv_id">
-            <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden hover:shadow-md transition-shadow">
+            <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden hover:shadow-md transition-shadow relative"
+                 @mouseenter="showPreview(paper, $el)"
+                 @mouseleave="hidePreview()">
                 <!-- Cover Image -->
                 <template x-if="paper.cover_image">
                     <div :class="{
@@ -374,7 +376,9 @@
         <!-- List Items -->
         <template x-for="paper in filteredPapers" :key="paper.arxiv_id">
             <div class="grid grid-cols-12 gap-4 px-4 py-3 border-b border-gray-100 dark:border-gray-700/50 hover:bg-gray-50 dark:hover:bg-gray-700/30 items-center text-sm"
-                 :class="isSelected(paper.arxiv_id) ? 'bg-blue-50 dark:bg-blue-900/20' : ''">
+                 :class="isSelected(paper.arxiv_id) ? 'bg-blue-50 dark:bg-blue-900/20' : ''"
+                 @mouseenter="showPreview(paper, $el)"
+                 @mouseleave="hidePreview()">
                 <!-- Checkbox + Star -->
                 <div class="col-span-1 flex items-center gap-2">
                     <input type="checkbox" 
@@ -434,6 +438,25 @@
             </div>
         </template>
     </div>
+    
+    <!-- Abstract Preview Tooltip -->
+    <div x-show="previewPaper" 
+         x-cloak
+         x-transition:enter="transition ease-out duration-150"
+         x-transition:enter-start="opacity-0 scale-95"
+         x-transition:enter-end="opacity-100 scale-100"
+         x-transition:leave="transition ease-in duration-100"
+         x-transition:leave-start="opacity-100 scale-100"
+         x-transition:leave-end="opacity-0 scale-95"
+         :style="previewStyle"
+         class="fixed z-50 w-[40rem] max-h-[70vh] overflow-y-auto bg-white dark:bg-gray-800 rounded-xl shadow-2xl border-2 border-gray-200 dark:border-gray-600 p-5 pointer-events-none ring-1 ring-black/5 dark:ring-white/10">
+        <template x-if="previewPaper">
+            <div>
+                <h4 class="font-medium text-gray-900 dark:text-gray-100 text-base mb-3 leading-snug" x-html="previewPaper.title"></h4>
+                <p class="text-sm text-gray-700 dark:text-gray-300 leading-relaxed" x-html="previewPaper.abstract"></p>
+            </div>
+        </template>
+    </div>
 </div>
 {% endblock %}
 
@@ -462,6 +485,11 @@ function library() {
         // Selection state
         selectedPapers: new Set(),
         downloadingPdfs: false,
+        
+        // Preview state
+        previewPaper: null,
+        previewStyle: '',
+        previewTimeout: null,
         
         // Reference data
         shelves: [],
@@ -784,6 +812,73 @@ function library() {
                 }
             }
             return authors.length > 1 ? `${lastName} et al.` : lastName;
+        },
+        
+        // Abstract preview functions
+        showPreview(paper, el) {
+            // Clear any existing timeout
+            if (this.previewTimeout) {
+                clearTimeout(this.previewTimeout);
+            }
+            
+            // Debounce: wait 300ms before showing
+            this.previewTimeout = setTimeout(() => {
+                const rect = el.getBoundingClientRect();
+                const viewportWidth = window.innerWidth;
+                const viewportHeight = window.innerHeight;
+                const tooltipWidth = 640; // w-[40rem] = 640px
+                const tooltipMaxHeight = viewportHeight * 0.7; // max-h-[70vh]
+                
+                // Calculate horizontal position - prefer right side, fall back to left
+                let left = rect.right + 16;
+                if (left + tooltipWidth > viewportWidth - 20) {
+                    // Not enough room on right, try left
+                    left = rect.left - tooltipWidth - 16;
+                    if (left < 20) {
+                        // Not enough room on left either, center it
+                        left = Math.max(20, (viewportWidth - tooltipWidth) / 2);
+                    }
+                }
+                
+                // Determine if we're in the bottom half of the viewport
+                const elementCenter = rect.top + rect.height / 2;
+                const isBottomHalf = elementCenter > viewportHeight / 2;
+                
+                let top;
+                if (isBottomHalf) {
+                    // Position above the element - align bottom of tooltip with top of element
+                    top = rect.top - tooltipMaxHeight - 8;
+                    // Make sure we don't go above the viewport
+                    if (top < 20) {
+                        top = 20;
+                    }
+                } else {
+                    // Position below/aligned with the element
+                    top = rect.top;
+                    // Make sure we don't go below the viewport
+                    if (top + tooltipMaxHeight > viewportHeight - 20) {
+                        top = viewportHeight - tooltipMaxHeight - 20;
+                    }
+                }
+                
+                this.previewStyle = `left: ${left}px; top: ${top}px;`;
+                this.previewPaper = paper;
+                
+                // Re-render MathJax if present
+                this.$nextTick(() => {
+                    if (typeof renderMath === 'function') {
+                        renderMath();
+                    }
+                });
+            }, 300);
+        },
+        
+        hidePreview() {
+            if (this.previewTimeout) {
+                clearTimeout(this.previewTimeout);
+                this.previewTimeout = null;
+            }
+            this.previewPaper = null;
         }
     };
 }
