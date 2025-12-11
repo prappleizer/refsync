@@ -249,14 +249,10 @@
                 
                 <!-- Content -->
                 <div class="p-4">
-                    <!-- Top row: Status + Star -->
+                    <!-- Top row: Date + Star -->
                     <div class="flex items-center justify-between mb-2">
-                        <div class="flex gap-2">
-                            <span x-show="paper.status === 'to-read'" 
-                                  class="text-xs px-2 py-0.5 bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400 rounded">📚 To Read</span>
-                            <span x-show="paper.status === 'read'" 
-                                  class="text-xs px-2 py-0.5 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 rounded">✓ Read</span>
-                        </div>
+                        <span class="text-xs text-gray-500 dark:text-gray-400" 
+                              x-text="new Date(paper.published).toLocaleDateString('en-US', {year: 'numeric', month: 'short', day: 'numeric'})"></span>
                         <!-- Star indicator -->
                         <button @click.prevent="toggleStar(paper)" 
                                 class="p-1 -m-1 hover:scale-110 transition-transform"
@@ -315,14 +311,14 @@
             <div class="col-span-1"></div>
             <div class="col-span-5">Title</div>
             <div class="col-span-2">Author</div>
-            <div class="col-span-2">Shelf / Tags</div>
+            <div class="col-span-2">Date</div>
             <div class="col-span-2 text-right">Links</div>
         </div>
         
         <!-- List Items -->
         <template x-for="paper in filteredPapers" :key="paper.arxiv_id">
             <div class="grid grid-cols-12 gap-4 px-4 py-3 border-b border-gray-100 dark:border-gray-700/50 hover:bg-gray-50 dark:hover:bg-gray-700/30 items-center text-sm">
-                <!-- Star + Status -->
+                <!-- Star -->
                 <div class="col-span-1 flex items-center gap-1">
                     <button @click.prevent="toggleStar(paper)" 
                             class="hover:scale-110 transition-transform"
@@ -331,8 +327,6 @@
                             <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/>
                         </svg>
                     </button>
-                    <span x-show="paper.status === 'to-read'" class="text-yellow-500 text-xs">📚</span>
-                    <span x-show="paper.status === 'read'" class="text-green-500 text-xs">✓</span>
                 </div>
                 
                 <!-- Title -->
@@ -348,21 +342,15 @@
                     <span x-text="getFirstAuthorShort(paper.authors)"></span>
                 </div>
                 
-                <!-- Shelf / Tags -->
-                <div class="col-span-2 flex flex-wrap gap-1">
-                    <template x-for="tag in paper.tags.slice(0, 2)" :key="tag">
-                        <span class="text-xs px-1.5 py-0.5 bg-purple-50 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400 rounded"
-                              x-text="tag"></span>
-                    </template>
-                    <span x-show="paper.tags.length > 2" 
-                          class="text-xs text-gray-400"
-                          x-text="'+' + (paper.tags.length - 2)"></span>
+                <!-- Date -->
+                <div class="col-span-2 text-gray-500 dark:text-gray-400 text-xs">
+                    <span x-text="new Date(paper.published).toLocaleDateString('en-US', {year: 'numeric', month: 'short'})"></span>
                 </div>
                 
                 <!-- Links -->
                 <div class="col-span-2 text-right text-xs space-x-2">
-                    <a :href="paper.arxiv_url" target="_blank" class="text-gray-400 hover:text-arxiv-red">arXiv</a>
-                    <a :href="paper.pdf_url" target="_blank" class="text-gray-400 hover:text-arxiv-red">PDF</a>
+                    <a :href="paper.arxiv_url" target="_blank" class="text-gray-400 hover:text-arxiv-red dark:hover:text-red-400">arXiv</a>
+                    <a :href="paper.pdf_url" target="_blank" class="text-gray-400 hover:text-arxiv-red dark:hover:text-red-400">PDF</a>
                 </div>
             </div>
         </template>
