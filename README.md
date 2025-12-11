@@ -1,125 +1,106 @@
-# arXiv Library
+# RefSync
 
-A clean, minimalist web application for organizing and managing academic papers from arXiv.
+A citation manager for astronomers with seamless NASA ADS integration.
+
+![RefSync Logo](docs/logo.png)
 
 ## Features
 
-- **Add papers** by pasting any arXiv URL or ID
-- **Organize** papers into shelves and tag them
-- **Track** reading status (to-read, read)
-- **Search** across titles, abstracts, authors, and notes
-- **Filter** by shelf, tags, or reading status
-- **Add cover images** to papers for visual identification
-- **Notes** for each paper
-- **LaTeX rendering** via MathJax for proper display of mathematical notation
+- **📚 Paper Library**: Import papers from arXiv, organize with shelves and tags
+- **🔄 ADS Sync**: One-click sync to update arXiv preprints with published journal info
+- **📝 BibTeX Export**: Export citations for individual papers or filtered collections
+- **🌙 Dark Mode**: Easy on the eyes for those late-night paper sessions
+- **🔍 Full-text Search**: Search across titles, abstracts, authors, and notes
+- **⭐ Starred Papers**: Mark important papers for quick access
 
-## Tech Stack
+## Installation
 
-- **Backend**: FastAPI + SQLite (with abstraction layer for other DBs)
-- **Frontend**: Vanilla HTML/CSS/JS + Tailwind CSS + Alpine.js + MathJax
-- No heavy frameworks, no build step required
-
-## Setup
-
-1. Create a virtual environment (recommended):
 ```bash
-python -m venv venv
-source venv/bin/activate  # or `venv\Scripts\activate` on Windows
+pip install refsync
 ```
 
-2. Install dependencies:
+Or install from source:
+
 ```bash
-pip install -r requirements.txt
+git clone https://github.com/imad-pasha/refsync.git
+cd refsync
+pip install -e .
 ```
 
-3. Run the server:
+## Quick Start
+
 ```bash
-cd backend
-uvicorn main:app --reload
+# Start the server (opens browser automatically)
+refsync
+
+# Or specify host/port
+refsync --host 0.0.0.0 --port 8080
+
+# Don't open browser
+refsync --no-browser
 ```
 
-4. Open http://localhost:8000 in your browser
+Then visit http://localhost:8000 in your browser.
 
-## Project Structure
+## Configuration
 
-```
-arxiv-library/
-├── backend/
-│   ├── main.py           # FastAPI app entry point
-│   ├── config.py         # Settings
-│   ├── models.py         # Pydantic models
-│   ├── routers/          # API endpoints
-│   │   ├── papers.py     # Paper CRUD
-│   │   ├── shelves.py    # Shelf management
-│   │   └── tags.py       # Tag management
-│   ├── services/
-│   │   ├── arxiv.py      # arXiv API client
-│   │   └── latex.py      # LaTeX processing
-│   └── db/
-│       ├── base.py       # Abstract repository interfaces
-│       └── sqlite.py     # SQLite implementation
-├── frontend/
-│   ├── static/           # JS, CSS assets
-│   └── templates/        # Jinja2 HTML templates
-│       ├── base.html     # Base template
-│       ├── index.html    # Add paper page
-│       ├── library.html  # Browse library
-│       └── paper.html    # Paper detail page
-├── uploads/              # Cover images
-├── library.db            # SQLite database (created on first run)
-└── requirements.txt
+### Data Location
+
+By default, RefSync stores data in `~/.refsync/`. You can change this:
+
+```bash
+export REFSYNC_DATA_DIR=/path/to/your/data
+refsync
 ```
 
-## API Endpoints
+### NASA ADS API Key
 
-### Papers
-- `POST /api/papers` - Add paper from arXiv URL
-- `GET /api/papers` - List all papers
-- `GET /api/papers/search` - Search with filters
-- `GET /api/papers/{id}` - Get paper details
-- `PATCH /api/papers/{id}` - Update paper metadata
-- `DELETE /api/papers/{id}` - Remove paper
-- `POST /api/papers/{id}/cover` - Upload cover image
-- `DELETE /api/papers/{id}/cover` - Remove cover image
+To sync citations with NASA ADS:
 
-### Shelves
-- `GET /api/shelves` - List shelves
-- `POST /api/shelves` - Create shelf
-- `PATCH /api/shelves/{id}` - Update shelf
-- `DELETE /api/shelves/{id}` - Delete shelf
-- `GET /api/shelves/{id}/papers` - Papers in shelf
+1. Get a free API key from [ADS](https://ui.adsabs.harvard.edu/user/settings/token)
+2. Go to Settings in RefSync
+3. Enter your API key (stored encrypted locally)
 
-### Tags
-- `GET /api/tags` - List tags
-- `POST /api/tags` - Create tag
-- `PATCH /api/tags/{name}` - Update tag color
-- `DELETE /api/tags/{name}` - Delete tag
+## Usage
 
-## Future Directions
+### Adding Papers
 
-- **NASA ADS Integration**: Export BibTeX via ADS API
-- **Citation Networks**: Visualize paper citations
-- **Author Networks**: See collaboration graphs
-- **Import/Export**: Backup and restore library data
+1. Go to "Add Paper"
+2. Paste an arXiv URL or ID (e.g., `2301.07041` or `https://arxiv.org/abs/2301.07041`)
+3. Click "Fetch" to preview
+4. Add to shelves, tags, set reading status
+5. Click "Add to Library"
 
-## Alpine.js Quick Reference
+### Syncing with ADS
 
-Alpine.js is used for reactivity. Key directives:
-- `x-data` - Declare reactive data
-- `x-model` - Two-way bind form inputs
-- `x-show` - Conditionally show elements
-- `x-on:click` or `@click` - Event handlers
-- `x-text` - Set text content
-- `x-html` - Set HTML content (used for MathJax)
-- `x-for` - Loop over arrays
+1. Configure your ADS API key in Settings
+2. Go to Library
+3. Click "Sync with ADS"
+4. Papers that have been published will be updated with journal info
 
-Example:
-```html
-<div x-data="{ count: 0 }">
-    <button @click="count++">Clicked <span x-text="count"></span> times</button>
-</div>
+### Exporting BibTeX
+
+- **Single paper**: Click "Copy BibTeX" on the paper detail page
+- **Multiple papers**: Use filters in Library, then click "Export BibTeX"
+
+## Development
+
+```bash
+# Install with dev dependencies
+pip install -e ".[dev]"
+
+# Run with auto-reload
+refsync --reload
+
+# Run tests
+pytest
 ```
 
 ## License
 
-MIT
+MIT License - see [LICENSE](LICENSE) for details.
+
+## Acknowledgments
+
+- [NASA ADS](https://ui.adsabs.harvard.edu/) for their excellent API
+- [arXiv](https://arxiv.org/) for open access to preprints

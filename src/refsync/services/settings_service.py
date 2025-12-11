@@ -5,16 +5,15 @@ Settings management with encrypted storage for sensitive values.
 import base64
 import json
 import os
-from pathlib import Path
 from typing import Optional
 
 from cryptography.fernet import Fernet
 
 from ..config import settings as app_settings
 
-# Settings file location
-SETTINGS_FILE = Path(app_settings.base_dir) / "settings.json"
-ENCRYPTION_KEY_FILE = Path(app_settings.base_dir) / ".encryption_key"
+# Settings file location (in user data directory)
+SETTINGS_FILE = app_settings.data_dir / "settings.json"
+ENCRYPTION_KEY_FILE = app_settings.data_dir / ".encryption_key"
 
 
 def _get_or_create_encryption_key() -> bytes:

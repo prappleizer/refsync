@@ -6,12 +6,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from .config import settings
-from .db import (
-    SQLiteDatabase,
-    SQLitePaperRepository,
-    SQLiteShelfRepository,
-    SQLiteTagRepository,
-)
+from .db import SQLiteDatabase, SQLitePaperRepository, SQLiteShelfRepository, SQLiteTagRepository
 from .routers import papers, shelves, tags
 from .routers import settings as settings_router
 
@@ -42,12 +37,12 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title=settings.app_name, lifespan=lifespan)
 
-# Mount static files
-app.mount("/static", StaticFiles(directory=settings.static_dir), name="static")
-app.mount("/uploads", StaticFiles(directory=settings.uploads_dir), name="uploads")
+# Mount static files (convert Path to str for FastAPI)
+app.mount("/static", StaticFiles(directory=str(settings.static_dir)), name="static")
+app.mount("/uploads", StaticFiles(directory=str(settings.uploads_dir)), name="uploads")
 
 # Templates
-templates = Jinja2Templates(directory=settings.templates_dir)
+templates = Jinja2Templates(directory=str(settings.templates_dir))
 
 # Include API routers
 app.include_router(papers.router)
@@ -72,9 +67,7 @@ async def library(request: Request):
 @app.get("/paper/{arxiv_id:path}", response_class=HTMLResponse)
 async def paper_detail(request: Request, arxiv_id: str):
     """Single paper detail view"""
-    return templates.TemplateResponse(
-        "paper.html", {"request": request, "arxiv_id": arxiv_id}
-    )
+    return templates.TemplateResponse("paper.html", {"request": request, "arxiv_id": arxiv_id})
 
 
 @app.get("/settings", response_class=HTMLResponse)
