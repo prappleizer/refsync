@@ -6,11 +6,11 @@ A citation manager for astronomers with seamless NASA ADS integration.
 
 ## Features
 
-- **📚 Paper Library**: Import papers from arXiv, organize with shelves and tags
-- **🔄 ADS Sync**: One-click sync to update arXiv preprints with published journal info
-- **📝 BibTeX Export**: Export citations for individual papers or filtered collections
+- **Paper Library**: Import papers from arXiv, organize with shelves and tags [coming soon: import from ADS]. Explore papers via cards, lists, multifactor filtering, or search across titles, abstracts, authors, or personal notes. 
+- **Image Headers**: Attach (soon: choose) figures or images from papers to serve as card headers, for finding that one plot you remember
+- **ADS Sync**: One-click sync to update arXiv preprints with published journal info: any preprints published to journal in the interim get new citation bibtex with updated information
+- **📝 BibTeX Export**: Export citations in bibtex form for individual papers, collections, or any filtered set of papers, either to clipboard or `.bib` file. Bibtex are referenced via convenient Author:Year format.
 - **🌙 Dark Mode**: Easy on the eyes for those late-night paper sessions
-- **🔍 Full-text Search**: Search across titles, abstracts, authors, and notes
 - **⭐ Starred Papers**: Mark important papers for quick access
 
 ## Installation
@@ -48,7 +48,7 @@ Then visit http://localhost:8000 in your browser.
 
 ### Data Location
 
-By default, RefSync stores data in `~/.refsync/`. You can change this:
+By default, RefSync stores data (e.g., your personal library) in `~/.refsync/`. You can change this:
 
 ```bash
 export REFSYNC_DATA_DIR=/path/to/your/data
@@ -71,7 +71,7 @@ To sync citations with NASA ADS:
 1. Go to "Add Paper"
 2. Paste an arXiv URL or ID (e.g., `2301.07041` or `https://arxiv.org/abs/2301.07041`)
 3. Click "Fetch" to preview
-4. Add to shelves, tags, set reading status
+4. Add to shelves, tags, set reading status. Optionally upload an image to represent the paper in card headers.
 5. Click "Add to Library"
 
 ### Syncing with ADS
@@ -86,18 +86,7 @@ To sync citations with NASA ADS:
 - **Single paper**: Click "Copy BibTeX" on the paper detail page
 - **Multiple papers**: Use filters in Library, then click "Export BibTeX"
 
-## Development
-
-```bash
-# Install with dev dependencies
-pip install -e ".[dev]"
-
-# Run with auto-reload
-refsync --reload
-
-# Run tests
-pytest
-```
+From here either copy to clipboard, or export to a `.bib` file.
 
 ## License
 
