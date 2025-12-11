@@ -216,6 +216,17 @@
                                          focus:outline-none focus:ring-1 focus:ring-arxiv-red resize-none"></textarea>
                     </div>
                     
+                    <!-- Download PDF checkbox -->
+                    <div class="flex items-center gap-2">
+                        <input type="checkbox" 
+                               id="downloadPdf"
+                               x-model="downloadPdf"
+                               class="w-4 h-4 rounded border-gray-300 dark:border-gray-600 text-arxiv-red focus:ring-arxiv-red">
+                        <label for="downloadPdf" class="text-sm text-gray-700 dark:text-gray-300">
+                            Download PDF for offline viewing
+                        </label>
+                    </div>
+                    
                     <!-- Save Button -->
                     <div class="pt-2">
                         <button @click="savePaper"
@@ -258,6 +269,7 @@ function addPaper() {
         selectedTags: [],
         status: '',
         notes: '',
+        downloadPdf: false,
         
         // New item inputs
         showNewShelf: false,
@@ -321,6 +333,7 @@ function addPaper() {
                 this.selectedTags = [];
                 this.status = '';
                 this.notes = '';
+                this.downloadPdf = false;
                 
                 // Trigger MathJax after DOM update
                 this.$nextTick(() => renderMath());
@@ -416,18 +429,29 @@ function addPaper() {
                     })
                 });
                 
-                if (res.ok) {
-                    showToast('Paper added to library!', 'success');
-                    // Reset form
-                    this.arxivUrl = '';
-                    this.paper = null;
-                    this.selectedShelves = [];
-                    this.selectedTags = [];
-                    this.status = '';
-                    this.notes = '';
-                } else {
+                if (!res.ok) {
                     throw new Error('Failed to save paper');
                 }
+                
+                // Download PDF if requested
+                if (this.downloadPdf) {
+                    const pdfRes = await fetch(`/api/papers/${this.paper.arxiv_id}/download-pdf`, {
+                        method: 'POST'
+                    });
+                    if (!pdfRes.ok) {
+                        showToast('Paper added, but PDF download failed', 'warning');
+                    }
+                }
+                
+                showToast('Paper added to library!', 'success');
+                // Reset form
+                this.arxivUrl = '';
+                this.paper = null;
+                this.selectedShelves = [];
+                this.selectedTags = [];
+                this.status = '';
+                this.notes = '';
+                this.downloadPdf = false;
             } catch (e) {
                 showToast(e.message, 'error');
             } finally {

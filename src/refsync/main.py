@@ -40,6 +40,7 @@ app = FastAPI(title=settings.app_name, lifespan=lifespan)
 # Mount static files (convert Path to str for FastAPI)
 app.mount("/static", StaticFiles(directory=str(settings.static_dir)), name="static")
 app.mount("/uploads", StaticFiles(directory=str(settings.uploads_dir)), name="uploads")
+app.mount("/pdfs", StaticFiles(directory=str(settings.pdf_dir)), name="pdfs")
 
 # Templates
 templates = Jinja2Templates(directory=str(settings.templates_dir))

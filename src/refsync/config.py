@@ -34,6 +34,10 @@ class Settings(BaseSettings):
         return self.data_dir / "uploads"
 
     @property
+    def pdf_dir(self) -> Path:
+        return self.data_dir / "pdfs"
+
+    @property
     def templates_dir(self) -> Path:
         return self.package_dir / "frontend" / "templates"
 
@@ -61,3 +65,4 @@ settings = Settings()
 # Ensure data directories exist
 settings.data_dir.mkdir(parents=True, exist_ok=True)
 settings.uploads_dir.mkdir(parents=True, exist_ok=True)
+settings.pdf_dir.mkdir(parents=True, exist_ok=True)

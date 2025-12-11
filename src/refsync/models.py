@@ -51,6 +51,8 @@ class PaperUpdate(BaseModel):
     journal_ref: Optional[str] = None
     ads_bibcode: Optional[str] = None
     last_citation_sync: Optional[str] = None  # ISO format string
+    # Local PDF
+    local_pdf: Optional[str] = None
 
 
 class Paper(PaperBase):
@@ -73,6 +75,9 @@ class Paper(PaperBase):
     journal_ref: Optional[str] = None
     ads_bibcode: Optional[str] = None
     last_citation_sync: Optional[datetime] = None
+
+    # Local PDF storage
+    local_pdf: Optional[str] = None  # Filename like "Pasha_2024_2401.07041.pdf"
 
     class Config:
         from_attributes = True

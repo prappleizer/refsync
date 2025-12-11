@@ -76,13 +76,40 @@
                                 </svg>
                                 arXiv Page
                             </a>
+                            
+                            <!-- Local PDF (if available) -->
+                            <a x-show="paper.local_pdf"
+                               :href="'/pdfs/' + paper.local_pdf" target="_blank"
+                               class="inline-flex items-center text-sm text-green-600 dark:text-green-400 hover:underline">
+                                <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                                </svg>
+                                View Local PDF
+                            </a>
+                            
+                            <!-- arXiv PDF (always show, but labeled differently if local exists) -->
                             <a :href="paper.pdf_url" target="_blank"
                                class="inline-flex items-center text-sm text-arxiv-red dark:text-red-400 hover:underline">
                                 <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
                                 </svg>
-                                Download PDF
+                                <span x-text="paper.local_pdf ? 'arXiv PDF' : 'Download PDF'"></span>
                             </a>
+                            
+                            <!-- Download for offline button (if not already downloaded) -->
+                            <button x-show="!paper.local_pdf"
+                                    @click="downloadPdf()"
+                                    :disabled="downloadingPdf"
+                                    class="inline-flex items-center text-sm text-blue-600 dark:text-blue-400 hover:underline disabled:opacity-50">
+                                <svg x-show="!downloadingPdf" class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
+                                </svg>
+                                <svg x-show="downloadingPdf" class="w-4 h-4 mr-1 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                                </svg>
+                                <span x-text="downloadingPdf ? 'Downloading...' : 'Save Offline'"></span>
+                            </button>
+                            
                             <button @click="exportBibtex()"
                                     x-show="paper.bibtex"
                                     class="inline-flex items-center text-sm text-arxiv-red dark:text-red-400 hover:underline">
@@ -233,6 +260,7 @@ function paperDetail(arxivId) {
         arxivId: arxivId,
         paper: null,
         loading: true,
+        downloadingPdf: false,
         
         shelves: [],
         tags: [],
@@ -392,6 +420,29 @@ function paperDetail(arxivId) {
             const filename = `${this.paper.cite_key || this.paper.arxiv_id}.bib`;
             
             showBibtexModal(this.paper.bibtex, title, 1, filename);
+        },
+        
+        async downloadPdf() {
+            if (this.downloadingPdf) return;
+            
+            this.downloadingPdf = true;
+            try {
+                const res = await fetch(`/api/papers/${this.arxivId}/download-pdf`, {
+                    method: 'POST'
+                });
+                const data = await res.json();
+                
+                if (res.ok) {
+                    this.paper.local_pdf = data.filename;
+                    showToast('PDF downloaded for offline viewing', 'success');
+                } else {
+                    showToast(data.detail || 'Failed to download PDF', 'error');
+                }
+            } catch (e) {
+                showToast('Failed to download PDF', 'error');
+            } finally {
+                this.downloadingPdf = false;
+            }
         }
     };
 }

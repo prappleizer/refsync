@@ -69,7 +69,8 @@ class SQLiteDatabase:
                 doi TEXT,
                 journal_ref TEXT,
                 ads_bibcode TEXT,
-                last_citation_sync TEXT
+                last_citation_sync TEXT,
+                local_pdf TEXT
             );
             
             CREATE TABLE IF NOT EXISTS shelves (
@@ -135,17 +136,13 @@ class SQLitePaperRepository(PaperRepository):
             arxiv_url=row["arxiv_url"],
             shelves=json.loads(row["shelves"]),
             tags=json.loads(row["tags"]),
-            status=ReadingStatus(row["status"])
-            if row["status"]
-            else ReadingStatus.UNSET,
+            status=ReadingStatus(row["status"]) if row["status"] else ReadingStatus.UNSET,
             starred=bool(row["starred"]) if row["starred"] is not None else False,
             notes=row["notes"],
             cover_image=row["cover_image"],
             added_at=datetime.fromisoformat(row["added_at"]),
             bibtex=row["bibtex"] if "bibtex" in row.keys() else None,
-            bibtex_source=row["bibtex_source"]
-            if "bibtex_source" in row.keys()
-            else "arxiv",
+            bibtex_source=row["bibtex_source"] if "bibtex_source" in row.keys() else "arxiv",
             cite_key=row["cite_key"] if "cite_key" in row.keys() else None,
             is_published=bool(row["is_published"])
             if "is_published" in row.keys() and row["is_published"] is not None
@@ -156,6 +153,7 @@ class SQLitePaperRepository(PaperRepository):
             last_citation_sync=datetime.fromisoformat(row["last_citation_sync"])
             if "last_citation_sync" in row.keys() and row["last_citation_sync"]
             else None,
+            local_pdf=row["local_pdf"] if "local_pdf" in row.keys() else None,
         )
 
     async def create(self, paper: Paper) -> Paper:
@@ -165,8 +163,9 @@ class SQLitePaperRepository(PaperRepository):
                 arxiv_id, title, authors, abstract, categories,
                 published, updated, pdf_url, arxiv_url,
                 shelves, tags, status, starred, notes, cover_image, added_at,
-                bibtex, bibtex_source, cite_key, is_published, doi, journal_ref, ads_bibcode, last_citation_sync
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                bibtex, bibtex_source, cite_key, is_published, doi, journal_ref, ads_bibcode, last_citation_sync,
+                local_pdf
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
             (
                 paper.arxiv_id,
@@ -192,9 +191,8 @@ class SQLitePaperRepository(PaperRepository):
                 paper.doi,
                 paper.journal_ref,
                 paper.ads_bibcode,
-                paper.last_citation_sync.isoformat()
-                if paper.last_citation_sync
-                else None,
+                paper.last_citation_sync.isoformat() if paper.last_citation_sync else None,
+                paper.local_pdf,
             ),
         )
         await self.db.conn.commit()
@@ -255,6 +253,10 @@ class SQLitePaperRepository(PaperRepository):
         if data.last_citation_sync is not None:
             updates.append("last_citation_sync = ?")
             values.append(data.last_citation_sync)
+        # Local PDF (empty string means clear/set to NULL)
+        if data.local_pdf is not None:
+            updates.append("local_pdf = ?")
+            values.append(data.local_pdf if data.local_pdf else None)
 
         if updates:
             values.append(arxiv_id)
@@ -266,16 +268,13 @@ class SQLitePaperRepository(PaperRepository):
         return await self.get(arxiv_id)
 
     async def delete(self, arxiv_id: str) -> bool:
-        cursor = await self.db.conn.execute(
-            "DELETE FROM papers WHERE arxiv_id = ?", (arxiv_id,)
-        )
+        cursor = await self.db.conn.execute("DELETE FROM papers WHERE arxiv_id = ?", (arxiv_id,))
         await self.db.conn.commit()
         return cursor.rowcount > 0
 
     async def list_all(self, limit: int = 50, offset: int = 0) -> list[Paper]:
         async with self.db.conn.execute(
-            "SELECT * FROM papers ORDER BY added_at DESC LIMIT ? OFFSET ?",
-            (limit, offset),
+            "SELECT * FROM papers ORDER BY added_at DESC LIMIT ? OFFSET ?", (limit, offset)
         ) as cursor:
             rows = await cursor.fetchall()
             return [self._row_to_paper(row) for row in rows]
@@ -339,8 +338,7 @@ class SQLitePaperRepository(PaperRepository):
 
     async def set_cover(self, arxiv_id: str, cover_path: str) -> Optional[Paper]:
         await self.db.conn.execute(
-            "UPDATE papers SET cover_image = ? WHERE arxiv_id = ?",
-            (cover_path, arxiv_id),
+            "UPDATE papers SET cover_image = ? WHERE arxiv_id = ?", (cover_path, arxiv_id)
         )
         await self.db.conn.commit()
         return await self.get(arxiv_id)
@@ -385,9 +383,7 @@ class SQLiteShelfRepository(ShelfRepository):
             return await self._row_to_shelf(row) if row else None
 
     async def get_by_name(self, name: str) -> Optional[Shelf]:
-        async with self.db.conn.execute(
-            "SELECT * FROM shelves WHERE name = ?", (name,)
-        ) as cursor:
+        async with self.db.conn.execute("SELECT * FROM shelves WHERE name = ?", (name,)) as cursor:
             row = await cursor.fetchone()
             return await self._row_to_shelf(row) if row else None
 
@@ -414,8 +410,7 @@ class SQLiteShelfRepository(ShelfRepository):
     async def delete(self, shelf_id: str) -> bool:
         # First remove shelf from all papers
         async with self.db.conn.execute(
-            "SELECT arxiv_id, shelves FROM papers WHERE shelves LIKE ?",
-            (f'%"{shelf_id}"%',),
+            "SELECT arxiv_id, shelves FROM papers WHERE shelves LIKE ?", (f'%"{shelf_id}"%',)
         ) as cursor:
             rows = await cursor.fetchall()
             for row in rows:
@@ -426,16 +421,12 @@ class SQLiteShelfRepository(ShelfRepository):
                     (json.dumps(shelves), row["arxiv_id"]),
                 )
 
-        cursor = await self.db.conn.execute(
-            "DELETE FROM shelves WHERE id = ?", (shelf_id,)
-        )
+        cursor = await self.db.conn.execute("DELETE FROM shelves WHERE id = ?", (shelf_id,))
         await self.db.conn.commit()
         return cursor.rowcount > 0
 
     async def list_all(self) -> list[Shelf]:
-        async with self.db.conn.execute(
-            "SELECT * FROM shelves ORDER BY name"
-        ) as cursor:
+        async with self.db.conn.execute("SELECT * FROM shelves ORDER BY name") as cursor:
             rows = await cursor.fetchall()
             return [await self._row_to_shelf(row) for row in rows]
 
@@ -461,16 +452,13 @@ class SQLiteTagRepository(TagRepository):
 
     async def create(self, tag: TagCreate) -> Tag:
         await self.db.conn.execute(
-            "INSERT OR IGNORE INTO tags (name, color) VALUES (?, ?)",
-            (tag.name, tag.color),
+            "INSERT OR IGNORE INTO tags (name, color) VALUES (?, ?)", (tag.name, tag.color)
         )
         await self.db.conn.commit()
         return await self.get(tag.name)
 
     async def get(self, name: str) -> Optional[Tag]:
-        async with self.db.conn.execute(
-            "SELECT * FROM tags WHERE name = ?", (name,)
-        ) as cursor:
+        async with self.db.conn.execute("SELECT * FROM tags WHERE name = ?", (name,)) as cursor:
             row = await cursor.fetchone()
             return await self._row_to_tag(row) if row else None
 
@@ -498,8 +486,6 @@ class SQLiteTagRepository(TagRepository):
             return [await self._row_to_tag(row) for row in rows]
 
     async def update_color(self, name: str, color: str) -> Optional[Tag]:
-        await self.db.conn.execute(
-            "UPDATE tags SET color = ? WHERE name = ?", (color, name)
-        )
+        await self.db.conn.execute("UPDATE tags SET color = ? WHERE name = ?", (color, name))
         await self.db.conn.commit()
         return await self.get(name)

@@ -117,9 +117,7 @@ async def delete_paper(arxiv_id: str, repo: PaperRepository = Depends(get_paper_
 
 @router.post("/{arxiv_id}/cover", response_model=Paper)
 async def upload_cover(
-    arxiv_id: str,
-    file: UploadFile = File(...),
-    repo: PaperRepository = Depends(get_paper_repo),
+    arxiv_id: str, file: UploadFile = File(...), repo: PaperRepository = Depends(get_paper_repo)
 ):
     """Upload a cover image for a paper."""
     paper = await repo.get(arxiv_id)
@@ -130,8 +128,7 @@ async def upload_cover(
     allowed_types = {"image/jpeg", "image/png", "image/gif", "image/webp"}
     if file.content_type not in allowed_types:
         raise HTTPException(
-            status_code=400,
-            detail=f"Invalid file type. Allowed: {', '.join(allowed_types)}",
+            status_code=400, detail=f"Invalid file type. Allowed: {', '.join(allowed_types)}"
         )
 
     # Generate filename
@@ -184,18 +181,15 @@ async def sync_citations(
 
     if not has_ads_api_key():
         raise HTTPException(
-            status_code=400,
-            detail="ADS API key not configured. Please add your key in Settings.",
+            status_code=400, detail="ADS API key not configured. Please add your key in Settings."
         )
 
     # Get papers to sync
-    all_papers = await repo.list_all(limit=2000)
+    all_papers = await repo.list(limit=2000)
 
     if only_unsynced:
         # Filter to papers that haven't been synced or aren't published yet
-        papers_to_sync = [
-            p for p in all_papers if not p.is_published or not p.last_citation_sync
-        ]
+        papers_to_sync = [p for p in all_papers if not p.is_published or not p.last_citation_sync]
     else:
         papers_to_sync = all_papers
 
@@ -220,3 +214,81 @@ async def sync_citations(
         }
     except ADSError as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/{arxiv_id}/download-pdf")
+async def download_paper_pdf(arxiv_id: str, repo: PaperRepository = Depends(get_paper_repo)):
+    """Download a paper's PDF for offline viewing."""
+    from ..services.pdf import download_pdf
+
+    paper = await repo.get(arxiv_id)
+    if not paper:
+        raise HTTPException(status_code=404, detail="Paper not found")
+
+    # If already downloaded, just return success
+    if paper.local_pdf:
+        return {"status": "success", "filename": paper.local_pdf, "message": "Already downloaded"}
+
+    filename = await download_pdf(paper)
+    if not filename:
+        raise HTTPException(status_code=500, detail="Failed to download PDF")
+
+    # Update paper with local_pdf filename
+    await repo.update(arxiv_id, PaperUpdate(local_pdf=filename))
+
+    return {"status": "success", "filename": filename, "message": "PDF downloaded"}
+
+
+@router.delete("/{arxiv_id}/local-pdf")
+async def delete_paper_pdf(arxiv_id: str, repo: PaperRepository = Depends(get_paper_repo)):
+    """Delete a paper's locally stored PDF."""
+    from ..services.pdf import delete_local_pdf
+
+    paper = await repo.get(arxiv_id)
+    if not paper:
+        raise HTTPException(status_code=404, detail="Paper not found")
+
+    if not paper.local_pdf:
+        raise HTTPException(status_code=404, detail="No local PDF found")
+
+    delete_local_pdf(paper.local_pdf)
+
+    # Clear the local_pdf field - need to set to empty string to trigger update
+    await repo.update(arxiv_id, PaperUpdate(local_pdf=""))
+
+    return {"status": "success", "message": "Local PDF deleted"}
+
+
+@router.post("/download-pdfs")
+async def download_multiple_pdfs(
+    arxiv_ids: list[str], repo: PaperRepository = Depends(get_paper_repo)
+):
+    """Download PDFs for multiple papers."""
+    from ..services.pdf import download_pdf
+
+    results = {"downloaded": 0, "already_exists": 0, "failed": 0, "errors": []}
+
+    for arxiv_id in arxiv_ids:
+        paper = await repo.get(arxiv_id)
+        if not paper:
+            results["failed"] += 1
+            results["errors"].append(f"{arxiv_id}: not found")
+            continue
+
+        if paper.local_pdf:
+            results["already_exists"] += 1
+            continue
+
+        filename = await download_pdf(paper)
+        if filename:
+            await repo.update(arxiv_id, PaperUpdate(local_pdf=filename))
+            results["downloaded"] += 1
+        else:
+            results["failed"] += 1
+            results["errors"].append(f"{arxiv_id}: download failed")
+
+    return {
+        "status": "success",
+        "message": f"Downloaded {results['downloaded']} PDFs",
+        "stats": results,
+    }

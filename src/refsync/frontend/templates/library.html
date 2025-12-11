@@ -164,15 +164,56 @@
     </div>
     
     <!-- Results Count and Actions -->
-    <div class="mb-4 flex items-center justify-between">
-        <div class="text-sm text-gray-500 dark:text-gray-400">
-            <span x-text="filteredPapers.length"></span> of <span x-text="allPapers.length"></span> papers
-            <span x-show="searchQuery || filterShelf || filterTags.length || filterStatus || filterStarred">
-                (filtered)
-            </span>
+    <div class="mb-4 flex flex-wrap items-center justify-between gap-2">
+        <div class="flex items-center gap-4">
+            <div class="text-sm text-gray-500 dark:text-gray-400">
+                <span x-text="filteredPapers.length"></span> of <span x-text="allPapers.length"></span> papers
+                <span x-show="searchQuery || filterShelf || filterTags.length || filterStatus || filterStarred">
+                    (filtered)
+                </span>
+            </div>
+            
+            <!-- Selection info -->
+            <div x-show="selectedPapers.size > 0" class="flex items-center gap-2 text-sm">
+                <span class="text-blue-600 dark:text-blue-400 font-medium" x-text="selectedPapers.size + ' selected'"></span>
+                <button @click="selectNone()" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
+                    (clear)
+                </button>
+            </div>
         </div>
         
         <div class="flex items-center gap-2">
+            <!-- Select All / None -->
+            <div x-show="filteredPapers.length > 0" class="flex items-center gap-1 mr-2">
+                <button @click="selectAll()" 
+                        class="text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200">
+                    Select all
+                </button>
+                <span class="text-gray-300 dark:text-gray-600">|</span>
+                <button @click="selectNone()" 
+                        class="text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200">
+                    None
+                </button>
+            </div>
+            
+            <!-- Download PDFs Button -->
+            <button @click="downloadSelectedPdfs()"
+                    :disabled="downloadingPdfs"
+                    x-show="filteredPapers.length > 0"
+                    class="inline-flex items-center gap-2 px-3 py-1.5 text-sm text-gray-600 dark:text-gray-400 
+                           hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-700 
+                           rounded-lg transition-colors disabled:opacity-50">
+                <svg :class="downloadingPdfs ? 'animate-spin' : ''" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <template x-if="!downloadingPdfs">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
+                    </template>
+                    <template x-if="downloadingPdfs">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                    </template>
+                </svg>
+                <span x-text="downloadingPdfs ? 'Downloading...' : 'Download PDFs'"></span>
+            </button>
+            
             <!-- Sync Citations Button -->
             <button @click="syncCitations()"
                     :disabled="syncing"
@@ -249,10 +290,24 @@
                 
                 <!-- Content -->
                 <div class="p-4">
-                    <!-- Top row: Date + Star -->
+                    <!-- Top row: Checkbox + Date + Star -->
                     <div class="flex items-center justify-between mb-2">
-                        <span class="text-xs text-gray-500 dark:text-gray-400" 
-                              x-text="new Date(paper.published).toLocaleDateString('en-US', {year: 'numeric', month: 'short', day: 'numeric'})"></span>
+                        <div class="flex items-center gap-2">
+                            <!-- Selection checkbox -->
+                            <input type="checkbox" 
+                                   :checked="isSelected(paper.arxiv_id)"
+                                   @click.stop="toggleSelect(paper.arxiv_id)"
+                                   class="w-4 h-4 rounded border-gray-300 dark:border-gray-600 text-blue-600 
+                                          focus:ring-blue-500 dark:bg-gray-700 cursor-pointer">
+                            <span class="text-xs text-gray-500 dark:text-gray-400" 
+                                  x-text="new Date(paper.published).toLocaleDateString('en-US', {year: 'numeric', month: 'short', day: 'numeric'})"></span>
+                            <!-- Local PDF indicator -->
+                            <span x-show="paper.local_pdf" class="text-green-500" title="Saved offline">
+                                <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clip-rule="evenodd"/>
+                                </svg>
+                            </span>
+                        </div>
                         <!-- Star indicator -->
                         <button @click.prevent="toggleStar(paper)" 
                                 class="p-1 -m-1 hover:scale-110 transition-transform"
@@ -317,9 +372,15 @@
         
         <!-- List Items -->
         <template x-for="paper in filteredPapers" :key="paper.arxiv_id">
-            <div class="grid grid-cols-12 gap-4 px-4 py-3 border-b border-gray-100 dark:border-gray-700/50 hover:bg-gray-50 dark:hover:bg-gray-700/30 items-center text-sm">
-                <!-- Star -->
-                <div class="col-span-1 flex items-center gap-1">
+            <div class="grid grid-cols-12 gap-4 px-4 py-3 border-b border-gray-100 dark:border-gray-700/50 hover:bg-gray-50 dark:hover:bg-gray-700/30 items-center text-sm"
+                 :class="isSelected(paper.arxiv_id) ? 'bg-blue-50 dark:bg-blue-900/20' : ''">
+                <!-- Checkbox + Star -->
+                <div class="col-span-1 flex items-center gap-2">
+                    <input type="checkbox" 
+                           :checked="isSelected(paper.arxiv_id)"
+                           @click.stop="toggleSelect(paper.arxiv_id)"
+                           class="w-4 h-4 rounded border-gray-300 dark:border-gray-600 text-blue-600 
+                                  focus:ring-blue-500 dark:bg-gray-700 cursor-pointer">
                     <button @click.prevent="toggleStar(paper)" 
                             class="hover:scale-110 transition-transform"
                             :class="paper.starred ? 'text-yellow-400' : 'text-gray-300 dark:text-gray-600 hover:text-yellow-400'">
@@ -335,6 +396,12 @@
                        class="text-gray-900 dark:text-gray-100 hover:text-arxiv-red line-clamp-1 font-medium"
                        x-html="paper.title"></a>
                     <span class="text-xs text-gray-400 dark:text-gray-500 ml-1" x-text="paper.arxiv_id"></span>
+                    <!-- Local PDF indicator -->
+                    <span x-show="paper.local_pdf" class="text-green-500 ml-1" title="Saved offline">
+                        <svg class="w-3 h-3 inline" fill="currentColor" viewBox="0 0 20 20">
+                            <path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clip-rule="evenodd"/>
+                        </svg>
+                    </span>
                 </div>
                 
                 <!-- Author -->
@@ -379,6 +446,10 @@ function library() {
         
         // Sync state
         syncing: false,
+        
+        // Selection state
+        selectedPapers: new Set(),
+        downloadingPdfs: false,
         
         // Reference data
         shelves: [],
@@ -587,8 +658,9 @@ function library() {
         },
         
         exportBibtex() {
-            // Gather bibtex from all filtered papers
-            const bibtexEntries = this.filteredPapers
+            // Use selected papers if any, otherwise use filtered papers
+            const papers = this.getEffectiveSelection();
+            const bibtexEntries = papers
                 .filter(p => p.bibtex)
                 .map(p => p.bibtex);
             
@@ -600,9 +672,11 @@ function library() {
             const combined = bibtexEntries.join('\n\n');
             const count = bibtexEntries.length;
             
-            // Generate title based on filters
+            // Generate title based on selection/filters
             let title = 'Export BibTeX';
-            if (this.filterShelf) {
+            if (this.selectedPapers.size > 0) {
+                title = `BibTeX: ${count} selected`;
+            } else if (this.filterShelf) {
                 const shelf = this.shelves.find(s => s.id === this.filterShelf);
                 if (shelf) title = `BibTeX: ${shelf.name}`;
             } else if (this.filterTags.length === 1) {
@@ -612,6 +686,74 @@ function library() {
             }
             
             showBibtexModal(combined, title, count);
+        },
+        
+        // Selection helpers
+        getEffectiveSelection() {
+            // If papers are selected, use those; otherwise use all filtered papers
+            if (this.selectedPapers.size > 0) {
+                return this.filteredPapers.filter(p => this.selectedPapers.has(p.arxiv_id));
+            }
+            return this.filteredPapers;
+        },
+        
+        toggleSelect(arxivId) {
+            if (this.selectedPapers.has(arxivId)) {
+                this.selectedPapers.delete(arxivId);
+            } else {
+                this.selectedPapers.add(arxivId);
+            }
+            // Force reactivity
+            this.selectedPapers = new Set(this.selectedPapers);
+        },
+        
+        isSelected(arxivId) {
+            return this.selectedPapers.has(arxivId);
+        },
+        
+        selectAll() {
+            this.filteredPapers.forEach(p => this.selectedPapers.add(p.arxiv_id));
+            this.selectedPapers = new Set(this.selectedPapers);
+        },
+        
+        selectNone() {
+            this.selectedPapers.clear();
+            this.selectedPapers = new Set(this.selectedPapers);
+        },
+        
+        async downloadSelectedPdfs() {
+            if (this.downloadingPdfs) return;
+            
+            const papers = this.getEffectiveSelection();
+            const toDownload = papers.filter(p => !p.local_pdf).map(p => p.arxiv_id);
+            
+            if (toDownload.length === 0) {
+                showToast('All selected papers already have local PDFs', 'info');
+                return;
+            }
+            
+            this.downloadingPdfs = true;
+            try {
+                const res = await fetch('/api/papers/download-pdfs', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(toDownload)
+                });
+                
+                const data = await res.json();
+                
+                if (res.ok) {
+                    showToast(data.message, 'success');
+                    // Reload papers to get updated local_pdf info
+                    await this.loadAllPapers();
+                } else {
+                    showToast(data.detail || 'Download failed', 'error');
+                }
+            } catch (e) {
+                showToast('Failed to download PDFs', 'error');
+            } finally {
+                this.downloadingPdfs = false;
+            }
         },
         
         // Helper for list view - returns "LastName et al." or just "LastName"
