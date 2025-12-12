@@ -74,19 +74,41 @@ To sync citations with NASA ADS:
 4. Add to shelves, tags, set reading status. Optionally upload an image to represent the paper in card headers.
 5. Click "Add to Library"
 
-### Syncing with ADS
+### Library 
+Your library is your home for all the papers you've added.
+![library](docs/library.png)
+
+You can view papers as cards (notice how some have had image headers added!) or in list form:
+![list](docs/list.png)
+
+At the top is a search bar that lets you filter (character by character) on title, abstract, authors, or notes you have made for individual papers. You can also filter by starred papers, by shelf, by tag, by status (read vs. unread) or by any combination therein.
+
+When you hover over a card/list item, you get a preview popup of the abstract:
+
+![hover](docs/hover.png)
+
+And clicking on a paper will take you to its page, where you can update tags/shelves, add notes, and access the pdf of the paper (either on arxiv or in your offline downloaded library).
+
+![paperpage](docs/paper.png)
+
+You can also export the paper bibtex --- or, returning to the library, we can export bibtex for any list of papers, either by filtering down to a set we want using the various options, or by checking the papers to include (or both --- if you check any papers, only those will be included). 
+
+![export](docs/export.png)
+
+
+
+## Syncing with ADS
+
+A major feature of `refsync` is, naturally, the sync feature. Using this, you can keep your library synced with NASA ADS. That way, if an e-print gets published in a journal, the updated ADS reference can be pulled and integrated into your citation library --- then upon export, you will have all published papers with their full journal citations, while e-print only papers reserve their arxiv bibtex. 
+
+To set this up:
 
 1. Configure your ADS API key in Settings
 2. Go to Library
 3. Click "Sync with ADS"
 4. Papers that have been published will be updated with journal info
 
-### Exporting BibTeX
-
-- **Single paper**: Click "Copy BibTeX" on the paper detail page
-- **Multiple papers**: Use filters in Library, then click "Export BibTeX"
-
-From here either copy to clipboard, or export to a `.bib` file.
+Coming Soon: Settings to allow your `refsync` app to auto-sync with ADS every N hours/days.
 
 ## License
 
