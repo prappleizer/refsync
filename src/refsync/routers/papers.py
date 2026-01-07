@@ -185,7 +185,7 @@ async def sync_citations(
         )
 
     # Get papers to sync
-    all_papers = await repo.list(limit=2000)
+    all_papers = await repo.list_all(limit=2000)
 
     if only_unsynced:
         # Filter to papers that haven't been synced or aren't published yet
