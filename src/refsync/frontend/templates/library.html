@@ -50,9 +50,17 @@
                          class="absolute top-full left-0 mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg py-1 min-w-[220px] z-10">
                         <button @click="filterShelf = null; filterPapers(); open = false"
                                 class="w-full px-3 py-2 text-left text-sm hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300"
-                                :class="{ 'text-arxiv-red': !filterShelf }">
+                                :class="{ 'text-arxiv-red': filterShelf === null }">
                             All Shelves
                         </button>
+                        <button @click="filterShelf = '__unshelved__'; filterPapers(); open = false"
+                                class="w-full px-3 py-2 text-left text-sm hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400 italic"
+                                :class="{ 'text-arxiv-red': filterShelf === '__unshelved__' }">
+                            Unshelved
+                            <span class="text-gray-400 dark:text-gray-500 text-xs ml-1 not-italic"
+                                  x-text="'(' + allPapers.filter(p => !p.shelves || p.shelves.length === 0).length + ')'"></span>
+                        </button>
+                        <div class="border-t border-gray-100 dark:border-gray-700 my-1" x-show="shelves.length > 0"></div>
                         <template x-for="shelf in shelves" :key="shelf.id">
                             <div class="group flex items-center hover:bg-gray-50 dark:hover:bg-gray-700">
                                 <!-- Normal display mode -->
@@ -109,13 +117,23 @@
                     <button @click="open = !open"
                             class="px-3 py-2 border border-gray-200 dark:border-gray-600 rounded-lg text-sm flex items-center gap-2 hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300">
                         <span>Tags</span>
-                        <span x-show="filterTags.length" class="bg-purple-600 text-white text-xs px-1.5 rounded" x-text="filterTags.length"></span>
+                        <span x-show="filterTags.length || filterUntagged" class="bg-purple-600 text-white text-xs px-1.5 rounded" x-text="filterUntagged ? 1 : filterTags.length"></span>
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
                         </svg>
                     </button>
                     <div x-show="open" x-cloak @click.away="if (!editingTagName) open = false"
                          class="absolute top-full left-0 mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg py-1 min-w-[220px] z-10 max-h-64 overflow-auto">
+                        <label class="flex items-center px-3 py-2 hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer">
+                            <input type="checkbox"
+                                   :checked="filterUntagged"
+                                   @change="filterUntagged = !filterUntagged; if (filterUntagged) filterTags = []; filterPapers()"
+                                   class="mr-2 rounded text-purple-600">
+                            <span class="text-sm text-gray-500 dark:text-gray-400 italic">Untagged</span>
+                            <span class="text-gray-400 dark:text-gray-500 text-xs ml-auto not-italic"
+                                  x-text="'(' + allPapers.filter(p => !p.tags || p.tags.length === 0).length + ')'"></span>
+                        </label>
+                        <div class="border-t border-gray-100 dark:border-gray-700 my-1" x-show="tags.length > 0"></div>
                         <template x-for="tag in tags" :key="tag.name">
                             <div class="group flex items-center hover:bg-gray-50 dark:hover:bg-gray-700">
                                 <!-- Normal display mode -->
@@ -191,10 +209,10 @@
                 
                 <!-- Clear Filters (always visible, styled when active) -->
                 <button @click="clearFilters()"
-                        :class="(searchQuery || filterShelf || filterTags.length || filterStatus || filterStarred) 
+                        :class="(searchQuery || filterShelf || filterTags.length || filterUntagged || filterStatus || filterStarred) 
                             ? 'text-gray-500 hover:text-gray-700' 
                             : 'text-gray-300 cursor-default'"
-                        :disabled="!(searchQuery || filterShelf || filterTags.length || filterStatus || filterStarred)"
+                        :disabled="!(searchQuery || filterShelf || filterTags.length || filterUntagged || filterStatus || filterStarred)"
                         class="px-3 py-2 text-sm">
                     Clear all
                 </button>
@@ -248,7 +266,7 @@
         <div class="flex items-center gap-4">
             <div class="text-sm text-gray-500 dark:text-gray-400">
                 <span x-text="filteredPapers.length"></span> of <span x-text="allPapers.length"></span> papers
-                <span x-show="searchQuery || filterShelf || filterTags.length || filterStatus || filterStarred">
+                <span x-show="searchQuery || filterShelf || filterTags.length || filterUntagged || filterStatus || filterStarred">
                     (filtered)
                 </span>
             </div>
@@ -641,6 +659,7 @@ function library() {
         filterTags: [],
         filterStatus: null,
         filterStarred: false,
+        filterUntagged: false,
         
         // Sort & Display
         sortBy: 'recent',
@@ -731,11 +750,17 @@ function library() {
             
             // Shelf filter
             if (this.filterShelf) {
-                papers = papers.filter(p => p.shelves.includes(this.filterShelf));
+                if (this.filterShelf === '__unshelved__') {
+                    papers = papers.filter(p => !p.shelves || p.shelves.length === 0);
+                } else {
+                    papers = papers.filter(p => p.shelves.includes(this.filterShelf));
+                }
             }
             
             // Tag filter
-            if (this.filterTags.length) {
+            if (this.filterUntagged) {
+                papers = papers.filter(p => !p.tags || p.tags.length === 0);
+            } else if (this.filterTags.length) {
                 papers = papers.filter(p => 
                     this.filterTags.every(tag => p.tags.includes(tag))
                 );
@@ -826,6 +851,7 @@ function library() {
         },
         
         toggleFilterTag(name) {
+            this.filterUntagged = false;
             if (this.filterTags.includes(name)) {
                 this.filterTags = this.filterTags.filter(t => t !== name);
             } else {
@@ -838,6 +864,7 @@ function library() {
             this.searchQuery = '';
             this.filterShelf = null;
             this.filterTags = [];
+            this.filterUntagged = false;
             this.filterStatus = null;
             this.filterStarred = false;
             this.filterPapers();
