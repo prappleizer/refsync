@@ -2,6 +2,7 @@ import uuid
 from typing import Optional
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from pydantic import BaseModel
 
 from ..config import settings
 from ..db import PaperRepository
@@ -292,3 +293,58 @@ async def download_multiple_pdfs(
         "message": f"Downloaded {results['downloaded']} PDFs",
         "stats": results,
     }
+
+
+class BulkUpdateRequest(BaseModel):
+    arxiv_ids: list[str]
+    add_shelves: Optional[list[str]] = None
+    remove_shelves: Optional[list[str]] = None
+    add_tags: Optional[list[str]] = None
+    remove_tags: Optional[list[str]] = None
+
+
+@router.post("/bulk-update")
+async def bulk_update_papers(
+    data: BulkUpdateRequest, repo: PaperRepository = Depends(get_paper_repo)
+):
+    """Add/remove shelves and tags for multiple papers at once."""
+    updated = 0
+
+    for arxiv_id in data.arxiv_ids:
+        paper = await repo.get(arxiv_id)
+        if not paper:
+            continue
+
+        changed = False
+        new_shelves = list(paper.shelves)
+        new_tags = list(paper.tags)
+
+        if data.add_shelves:
+            for s in data.add_shelves:
+                if s not in new_shelves:
+                    new_shelves.append(s)
+                    changed = True
+
+        if data.remove_shelves:
+            before = len(new_shelves)
+            new_shelves = [s for s in new_shelves if s not in data.remove_shelves]
+            if len(new_shelves) != before:
+                changed = True
+
+        if data.add_tags:
+            for t in data.add_tags:
+                if t not in new_tags:
+                    new_tags.append(t)
+                    changed = True
+
+        if data.remove_tags:
+            before = len(new_tags)
+            new_tags = [t for t in new_tags if t not in data.remove_tags]
+            if len(new_tags) != before:
+                changed = True
+
+        if changed:
+            await repo.update(arxiv_id, PaperUpdate(shelves=new_shelves, tags=new_tags))
+            updated += 1
+
+    return {"status": "success", "updated": updated}

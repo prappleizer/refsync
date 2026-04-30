@@ -119,3 +119,8 @@ class TagRepository(ABC):
     async def update_color(self, name: str, color: str) -> Optional[Tag]:
         """Update tag color"""
         pass
+
+    @abstractmethod
+    async def rename(self, old_name: str, new_name: str) -> Optional[Tag]:
+        """Rename a tag, updating all paper references"""
+        pass

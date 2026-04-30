@@ -46,19 +46,60 @@
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
                         </svg>
                     </button>
-                    <div x-show="open" x-cloak @click.away="open = false"
-                         class="absolute top-full left-0 mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg py-1 min-w-[150px] z-10">
+                    <div x-show="open" x-cloak @click.away="if (!editingShelfId) open = false"
+                         class="absolute top-full left-0 mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg py-1 min-w-[220px] z-10">
                         <button @click="filterShelf = null; filterPapers(); open = false"
                                 class="w-full px-3 py-2 text-left text-sm hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300"
                                 :class="{ 'text-arxiv-red': !filterShelf }">
                             All Shelves
                         </button>
                         <template x-for="shelf in shelves" :key="shelf.id">
-                            <button @click="filterShelf = shelf.id; filterPapers(); open = false"
-                                    class="w-full px-3 py-2 text-left text-sm hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300"
-                                    :class="{ 'text-arxiv-red': filterShelf === shelf.id }"
-                                    x-text="shelf.name + ' (' + shelf.paper_count + ')'">
-                            </button>
+                            <div class="group flex items-center hover:bg-gray-50 dark:hover:bg-gray-700">
+                                <!-- Normal display mode -->
+                                <template x-if="editingShelfId !== shelf.id">
+                                    <button @click="filterShelf = shelf.id; filterPapers(); open = false"
+                                            class="flex-1 px-3 py-2 text-left text-sm text-gray-700 dark:text-gray-300"
+                                            :class="{ 'text-arxiv-red': filterShelf === shelf.id }">
+                                        <span x-text="shelf.name"></span>
+                                        <span class="text-gray-400 dark:text-gray-500 text-xs ml-1" x-text="'(' + shelf.paper_count + ')'"></span>
+                                    </button>
+                                </template>
+                                <!-- Inline edit mode -->
+                                <template x-if="editingShelfId === shelf.id">
+                                    <div class="flex-1 px-2 py-1.5">
+                                        <input type="text"
+                                               x-model="editingName"
+                                               x-ref="shelfEditInput"
+                                               @keyup.enter="submitShelfRename(shelf)"
+                                               @keyup.escape="editingShelfId = null"
+                                               @click.stop
+                                               class="w-full px-2 py-1 text-sm border border-blue-400 dark:border-blue-500 rounded
+                                                      bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100
+                                                      focus:outline-none focus:ring-1 focus:ring-blue-400">
+                                        <div class="flex items-center gap-1 mt-1">
+                                            <button @click.stop="submitShelfRename(shelf)"
+                                                    class="px-2 py-0.5 text-xs bg-blue-600 text-white rounded hover:bg-blue-700">Save</button>
+                                            <button @click.stop="editingShelfId = null"
+                                                    class="px-2 py-0.5 text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200">Cancel</button>
+                                        </div>
+                                    </div>
+                                </template>
+                                <!-- Action buttons (hidden during edit) -->
+                                <div x-show="editingShelfId !== shelf.id" class="hidden group-hover:flex items-center gap-0.5 pr-2">
+                                    <button @click.stop="startShelfRename(shelf)" title="Rename"
+                                            class="p-1 text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 rounded">
+                                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+                                        </svg>
+                                    </button>
+                                    <button @click.stop="deleteShelf(shelf)" title="Delete"
+                                            class="p-1 text-gray-400 hover:text-red-600 dark:hover:text-red-400 rounded">
+                                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                                        </svg>
+                                    </button>
+                                </div>
+                            </div>
                         </template>
                     </div>
                 </div>
@@ -73,17 +114,56 @@
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
                         </svg>
                     </button>
-                    <div x-show="open" x-cloak @click.away="open = false"
-                         class="absolute top-full left-0 mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg py-1 min-w-[150px] z-10 max-h-64 overflow-auto">
+                    <div x-show="open" x-cloak @click.away="if (!editingTagName) open = false"
+                         class="absolute top-full left-0 mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg py-1 min-w-[220px] z-10 max-h-64 overflow-auto">
                         <template x-for="tag in tags" :key="tag.name">
-                            <label class="flex items-center px-3 py-2 hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer">
-                                <input type="checkbox" 
-                                       :checked="filterTags.includes(tag.name)"
-                                       @change="toggleFilterTag(tag.name)"
-                                       class="mr-2 rounded text-purple-600">
-                                <span class="text-sm text-gray-700 dark:text-gray-300" x-text="tag.name"></span>
-                                <span class="text-gray-400 dark:text-gray-500 text-xs ml-auto" x-text="'(' + tag.paper_count + ')'"></span>
-                            </label>
+                            <div class="group flex items-center hover:bg-gray-50 dark:hover:bg-gray-700">
+                                <!-- Normal display mode -->
+                                <template x-if="editingTagName !== tag.name">
+                                    <label class="flex-1 flex items-center px-3 py-2 cursor-pointer">
+                                        <input type="checkbox" 
+                                               :checked="filterTags.includes(tag.name)"
+                                               @change="toggleFilterTag(tag.name)"
+                                               class="mr-2 rounded text-purple-600">
+                                        <span class="text-sm text-gray-700 dark:text-gray-300" x-text="tag.name"></span>
+                                        <span class="text-gray-400 dark:text-gray-500 text-xs ml-auto" x-text="'(' + tag.paper_count + ')'"></span>
+                                    </label>
+                                </template>
+                                <!-- Inline edit mode -->
+                                <template x-if="editingTagName === tag.name">
+                                    <div class="flex-1 px-2 py-1.5">
+                                        <input type="text"
+                                               x-model="editingName"
+                                               @keyup.enter="submitTagRename(tag)"
+                                               @keyup.escape="editingTagName = null"
+                                               @click.stop
+                                               class="w-full px-2 py-1 text-sm border border-purple-400 dark:border-purple-500 rounded
+                                                      bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100
+                                                      focus:outline-none focus:ring-1 focus:ring-purple-400">
+                                        <div class="flex items-center gap-1 mt-1">
+                                            <button @click.stop="submitTagRename(tag)"
+                                                    class="px-2 py-0.5 text-xs bg-purple-600 text-white rounded hover:bg-purple-700">Save</button>
+                                            <button @click.stop="editingTagName = null"
+                                                    class="px-2 py-0.5 text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200">Cancel</button>
+                                        </div>
+                                    </div>
+                                </template>
+                                <!-- Action buttons (hidden during edit) -->
+                                <div x-show="editingTagName !== tag.name" class="hidden group-hover:flex items-center gap-0.5 pr-2">
+                                    <button @click.stop="startTagRename(tag)" title="Rename"
+                                            class="p-1 text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 rounded">
+                                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+                                        </svg>
+                                    </button>
+                                    <button @click.stop="deleteTag(tag)" title="Delete"
+                                            class="p-1 text-gray-400 hover:text-red-600 dark:hover:text-red-400 rounded">
+                                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                                        </svg>
+                                    </button>
+                                </div>
+                            </div>
                         </template>
                     </div>
                 </div>
@@ -173,12 +253,99 @@
                 </span>
             </div>
             
-            <!-- Selection info -->
-            <div x-show="selectedPapers.size > 0" class="flex items-center gap-2 text-sm">
+            <!-- Selection info + bulk actions -->
+            <div x-show="selectedPapers.size > 0" class="flex items-center gap-3 text-sm">
                 <span class="text-blue-600 dark:text-blue-400 font-medium" x-text="selectedPapers.size + ' selected'"></span>
                 <button @click="selectNone()" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
                     (clear)
                 </button>
+                <span class="text-gray-300 dark:text-gray-600">|</span>
+                
+                <!-- Bulk Add to Shelf -->
+                <div class="relative" x-data="{ open: false }">
+                    <button @click="open = !open"
+                            class="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-gray-600 dark:text-gray-300 
+                                   border border-gray-200 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/>
+                        </svg>
+                        Shelf
+                    </button>
+                    <div x-show="open" x-cloak @click.away="open = false"
+                         class="absolute top-full left-0 mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg py-1 min-w-[160px] z-20">
+                        <template x-for="shelf in shelves" :key="shelf.id">
+                            <button @click="bulkAddShelf(shelf.id); open = false"
+                                    class="w-full px-3 py-2 text-left text-sm hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300"
+                                    x-text="shelf.name">
+                            </button>
+                        </template>
+                        <div x-show="shelves.length === 0" class="px-3 py-2 text-sm text-gray-400 italic">No shelves yet</div>
+                    </div>
+                </div>
+                
+                <!-- Bulk Add Tag -->
+                <div class="relative" x-data="{ open: false }">
+                    <button @click="open = !open"
+                            class="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-gray-600 dark:text-gray-300 
+                                   border border-gray-200 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/>
+                        </svg>
+                        Tag
+                    </button>
+                    <div x-show="open" x-cloak @click.away="open = false"
+                         class="absolute top-full left-0 mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg py-1 min-w-[160px] z-20">
+                        <template x-for="tag in tags" :key="tag.name">
+                            <button @click="bulkAddTag(tag.name); open = false"
+                                    class="w-full px-3 py-2 text-left text-sm hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300"
+                                    x-text="tag.name">
+                            </button>
+                        </template>
+                        <div x-show="tags.length === 0" class="px-3 py-2 text-sm text-gray-400 italic">No tags yet</div>
+                    </div>
+                </div>
+                
+                <!-- Bulk Remove Shelf -->
+                <div class="relative" x-data="{ open: false }">
+                    <button @click="open = !open"
+                            class="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-gray-600 dark:text-gray-300 
+                                   border border-gray-200 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 12H4"/>
+                        </svg>
+                        Shelf
+                    </button>
+                    <div x-show="open" x-cloak @click.away="open = false"
+                         class="absolute top-full left-0 mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg py-1 min-w-[160px] z-20">
+                        <template x-for="shelf in shelves" :key="shelf.id">
+                            <button @click="bulkRemoveShelf(shelf.id); open = false"
+                                    class="w-full px-3 py-2 text-left text-sm hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300"
+                                    x-text="shelf.name">
+                            </button>
+                        </template>
+                    </div>
+                </div>
+                
+                <!-- Bulk Remove Tag -->
+                <div class="relative" x-data="{ open: false }">
+                    <button @click="open = !open"
+                            class="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-gray-600 dark:text-gray-300 
+                                   border border-gray-200 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 12H4"/>
+                        </svg>
+                        Tag
+                    </button>
+                    <div x-show="open" x-cloak @click.away="open = false"
+                         class="absolute top-full left-0 mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg py-1 min-w-[160px] z-20">
+                        <template x-for="tag in tags" :key="tag.name">
+                            <button @click="bulkRemoveTag(tag.name); open = false"
+                                    class="w-full px-3 py-2 text-left text-sm hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300"
+                                    x-text="tag.name">
+                            </button>
+                        </template>
+                    </div>
+                </div>
             </div>
         </div>
         
@@ -490,6 +657,11 @@ function library() {
         previewPaper: null,
         previewStyle: '',
         previewTimeout: null,
+        
+        // Inline edit state
+        editingShelfId: null,
+        editingTagName: null,
+        editingName: '',
         
         // Reference data
         shelves: [],
@@ -879,6 +1051,191 @@ function library() {
                 this.previewTimeout = null;
             }
             this.previewPaper = null;
+        },
+        
+        // === Shelf Management ===
+        
+        startShelfRename(shelf) {
+            this.editingTagName = null;
+            this.editingShelfId = shelf.id;
+            this.editingName = shelf.name;
+            this.$nextTick(() => {
+                const input = document.querySelector(`input[x-model="editingName"]`);
+                if (input) { input.focus(); input.select(); }
+            });
+        },
+        
+        async submitShelfRename(shelf) {
+            const newName = this.editingName.trim();
+            if (!newName || newName === shelf.name) {
+                this.editingShelfId = null;
+                return;
+            }
+            
+            try {
+                const res = await fetch(`/api/shelves/${shelf.id}`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name: newName })
+                });
+                if (res.ok) {
+                    this.editingShelfId = null;
+                    showToast(`Shelf renamed to "${newName}"`, 'success');
+                    await this.loadShelvesAndTags();
+                } else {
+                    const data = await res.json();
+                    showToast(data.detail || 'Failed to rename shelf', 'error');
+                }
+            } catch (e) {
+                showToast('Failed to rename shelf', 'error');
+            }
+        },
+        
+        async deleteShelf(shelf) {
+            if (!confirm(`Delete shelf "${shelf.name}"? This will remove it from ${shelf.paper_count} paper(s). The papers themselves will not be deleted.`)) return;
+            
+            try {
+                const res = await fetch(`/api/shelves/${shelf.id}`, { method: 'DELETE' });
+                if (res.ok) {
+                    if (this.filterShelf === shelf.id) {
+                        this.filterShelf = null;
+                    }
+                    showToast(`Shelf "${shelf.name}" deleted`, 'success');
+                    await Promise.all([this.loadShelvesAndTags(), this.loadAllPapers()]);
+                } else {
+                    showToast('Failed to delete shelf', 'error');
+                }
+            } catch (e) {
+                showToast('Failed to delete shelf', 'error');
+            }
+        },
+        
+        // === Tag Management ===
+        
+        startTagRename(tag) {
+            this.editingShelfId = null;
+            this.editingTagName = tag.name;
+            this.editingName = tag.name;
+            this.$nextTick(() => {
+                const input = document.querySelector(`input[x-model="editingName"]`);
+                if (input) { input.focus(); input.select(); }
+            });
+        },
+        
+        async submitTagRename(tag) {
+            const newName = this.editingName.trim();
+            if (!newName || newName === tag.name) {
+                this.editingTagName = null;
+                return;
+            }
+            
+            try {
+                const res = await fetch(`/api/tags/${encodeURIComponent(tag.name)}/rename`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ new_name: newName })
+                });
+                if (res.ok) {
+                    // Update filter if this tag was being filtered on
+                    const idx = this.filterTags.indexOf(tag.name);
+                    if (idx !== -1) {
+                        this.filterTags[idx] = newName;
+                    }
+                    this.editingTagName = null;
+                    showToast(`Tag renamed to "${newName}"`, 'success');
+                    await Promise.all([this.loadShelvesAndTags(), this.loadAllPapers()]);
+                } else {
+                    const data = await res.json();
+                    showToast(data.detail || 'Failed to rename tag', 'error');
+                }
+            } catch (e) {
+                showToast('Failed to rename tag', 'error');
+            }
+        },
+        
+        async deleteTag(tag) {
+            if (!confirm(`Delete tag "${tag.name}"? This will remove it from ${tag.paper_count} paper(s). The papers themselves will not be deleted.`)) return;
+            
+            try {
+                const res = await fetch(`/api/tags/${encodeURIComponent(tag.name)}`, { method: 'DELETE' });
+                if (res.ok) {
+                    this.filterTags = this.filterTags.filter(t => t !== tag.name);
+                    showToast(`Tag "${tag.name}" deleted`, 'success');
+                    await Promise.all([this.loadShelvesAndTags(), this.loadAllPapers()]);
+                } else {
+                    showToast('Failed to delete tag', 'error');
+                }
+            } catch (e) {
+                showToast('Failed to delete tag', 'error');
+            }
+        },
+        
+        // === Bulk Operations ===
+        
+        async _bulkUpdate(payload) {
+            try {
+                const res = await fetch('/api/papers/bulk-update', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                if (res.ok) {
+                    const data = await res.json();
+                    return data.updated;
+                } else {
+                    const data = await res.json();
+                    showToast(data.detail || 'Bulk update failed', 'error');
+                }
+            } catch (e) {
+                showToast('Bulk update failed', 'error');
+            }
+            return 0;
+        },
+        
+        async bulkAddShelf(shelfId) {
+            const ids = [...this.selectedPapers];
+            const shelf = this.shelves.find(s => s.id === shelfId);
+            const count = await this._bulkUpdate({ arxiv_ids: ids, add_shelves: [shelfId] });
+            if (count > 0) {
+                showToast(`Added ${count} paper(s) to "${shelf?.name || shelfId}"`, 'success');
+                await Promise.all([this.loadShelvesAndTags(), this.loadAllPapers()]);
+            } else {
+                showToast('All selected papers were already on that shelf', 'info');
+            }
+        },
+        
+        async bulkRemoveShelf(shelfId) {
+            const ids = [...this.selectedPapers];
+            const shelf = this.shelves.find(s => s.id === shelfId);
+            const count = await this._bulkUpdate({ arxiv_ids: ids, remove_shelves: [shelfId] });
+            if (count > 0) {
+                showToast(`Removed ${count} paper(s) from "${shelf?.name || shelfId}"`, 'success');
+                await Promise.all([this.loadShelvesAndTags(), this.loadAllPapers()]);
+            } else {
+                showToast('None of the selected papers were on that shelf', 'info');
+            }
+        },
+        
+        async bulkAddTag(tagName) {
+            const ids = [...this.selectedPapers];
+            const count = await this._bulkUpdate({ arxiv_ids: ids, add_tags: [tagName] });
+            if (count > 0) {
+                showToast(`Added tag "${tagName}" to ${count} paper(s)`, 'success');
+                await Promise.all([this.loadShelvesAndTags(), this.loadAllPapers()]);
+            } else {
+                showToast('All selected papers already had that tag', 'info');
+            }
+        },
+        
+        async bulkRemoveTag(tagName) {
+            const ids = [...this.selectedPapers];
+            const count = await this._bulkUpdate({ arxiv_ids: ids, remove_tags: [tagName] });
+            if (count > 0) {
+                showToast(`Removed tag "${tagName}" from ${count} paper(s)`, 'success');
+                await Promise.all([this.loadShelvesAndTags(), this.loadAllPapers()]);
+            } else {
+                showToast('None of the selected papers had that tag', 'info');
+            }
         }
     };
 }

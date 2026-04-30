@@ -94,7 +94,7 @@ async def get_shelf_papers(
     if not shelf:
         raise HTTPException(status_code=404, detail="Shelf not found")
 
-    from backend.models import SearchQuery
+    from ..models import SearchQuery
 
     result = await paper_repo.search(SearchQuery(shelves=[shelf_id], limit=1000))
     return result.papers

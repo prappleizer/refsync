@@ -28,6 +28,10 @@ class TagColorUpdate(BaseModel):
     color: str
 
 
+class TagRename(BaseModel):
+    new_name: str
+
+
 @router.get("", response_model=list[Tag])
 async def list_tags(repo: TagRepository = Depends(get_tag_repo)):
     """List all tags."""
@@ -55,6 +59,29 @@ async def update_tag_color(
 ):
     """Update a tag's color."""
     tag = await repo.update_color(name, data.color)
+    if not tag:
+        raise HTTPException(status_code=404, detail="Tag not found")
+    return tag
+
+
+@router.post("/{name}/rename", response_model=Tag)
+async def rename_tag(name: str, data: TagRename, repo: TagRepository = Depends(get_tag_repo)):
+    """Rename a tag, updating all paper references."""
+    new_name = data.new_name.strip()
+    if not new_name:
+        raise HTTPException(status_code=400, detail="Tag name cannot be empty")
+    if new_name == name:
+        tag = await repo.get(name)
+        if not tag:
+            raise HTTPException(status_code=404, detail="Tag not found")
+        return tag
+
+    # Check if new name already exists
+    existing = await repo.get(new_name)
+    if existing:
+        raise HTTPException(status_code=409, detail="A tag with this name already exists")
+
+    tag = await repo.rename(name, new_name)
     if not tag:
         raise HTTPException(status_code=404, detail="Tag not found")
     return tag

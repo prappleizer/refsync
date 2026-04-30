@@ -489,3 +489,28 @@ class SQLiteTagRepository(TagRepository):
         await self.db.conn.execute("UPDATE tags SET color = ? WHERE name = ?", (color, name))
         await self.db.conn.commit()
         return await self.get(name)
+
+    async def rename(self, old_name: str, new_name: str) -> Optional[Tag]:
+        # Check that old tag exists
+        old_tag = await self.get(old_name)
+        if not old_tag:
+            return None
+
+        # Update the tag record itself
+        await self.db.conn.execute("UPDATE tags SET name = ? WHERE name = ?", (new_name, old_name))
+
+        # Cascade: update all papers that reference this tag
+        async with self.db.conn.execute(
+            "SELECT arxiv_id, tags FROM papers WHERE tags LIKE ?", (f'%"{old_name}"%',)
+        ) as cursor:
+            rows = await cursor.fetchall()
+            for row in rows:
+                tags = json.loads(row["tags"])
+                tags = [new_name if t == old_name else t for t in tags]
+                await self.db.conn.execute(
+                    "UPDATE papers SET tags = ? WHERE arxiv_id = ?",
+                    (json.dumps(tags), row["arxiv_id"]),
+                )
+
+        await self.db.conn.commit()
+        return await self.get(new_name)
