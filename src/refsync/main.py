@@ -55,26 +55,22 @@ app.include_router(settings_router.router)
 # Page routes
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request):
-    """Main page - add papers"""
-    return templates.TemplateResponse("index.html", {"request": request})
+    return templates.TemplateResponse("index.html", request=request)
 
 
 @app.get("/library", response_class=HTMLResponse)
 async def library(request: Request):
-    """Library view - browse papers and shelves"""
-    return templates.TemplateResponse("library.html", {"request": request})
+    return templates.TemplateResponse("library.html", request=request)
 
 
 @app.get("/paper/{arxiv_id:path}", response_class=HTMLResponse)
 async def paper_detail(request: Request, arxiv_id: str):
-    """Single paper detail view"""
-    return templates.TemplateResponse("paper.html", {"request": request, "arxiv_id": arxiv_id})
+    return templates.TemplateResponse("paper.html", request=request, context={"arxiv_id": arxiv_id})
 
 
 @app.get("/settings", response_class=HTMLResponse)
 async def settings_page(request: Request):
-    """Settings page"""
-    return templates.TemplateResponse("settings.html", {"request": request})
+    return templates.TemplateResponse("settings.html", request=request)
 
 
 if __name__ == "__main__":
