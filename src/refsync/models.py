@@ -15,22 +15,35 @@ class ReadingStatus(str, Enum):
 
 
 class PaperBase(BaseModel):
-    """Core paper data from arXiv"""
+    """Core paper data (from arXiv or ADS)"""
 
-    arxiv_id: str
+    id: str  # internal primary key (see services.identifiers.make_paper_id)
+
+    # Source identifiers — at least one is present depending on `source`.
+    arxiv_id: Optional[str] = None  # bare arXiv id, e.g. "2301.07041" (None for ADS-only)
+    bibcode: Optional[str] = None  # ADS bibcode, e.g. "2025ApJ...980L...3P"
+
     title: str
     authors: list[str]
-    abstract: str
-    categories: list[str]
-    published: datetime
-    updated: datetime
-    pdf_url: str
-    arxiv_url: str
+    abstract: Optional[str] = None  # ADS records may lack an abstract
+    categories: list[str] = Field(default_factory=list)
+    published: Optional[datetime] = None
+    updated: Optional[datetime] = None
+
+    # Links — arxiv fields are None for ADS-only papers; ads_url is the canonical
+    # ADS abstract page (present for ADS-sourced papers).
+    pdf_url: Optional[str] = None
+    arxiv_url: Optional[str] = None
+    ads_url: Optional[str] = None
+
+    source: str = "arxiv"  # "arxiv" | "ads"
 
 
 class PaperCreate(BaseModel):
-    """Request to add a paper - just needs the URL"""
+    """Request to add a paper - accepts an arXiv URL/ID or an ADS URL/bibcode"""
 
+    # Kept the field name `arxiv_url` for frontend compatibility; it now accepts
+    # ADS URLs and bibcodes too. `url` is an accepted alias.
     arxiv_url: str
 
 
@@ -49,7 +62,8 @@ class PaperUpdate(BaseModel):
     is_published: Optional[bool] = None
     doi: Optional[str] = None
     journal_ref: Optional[str] = None
-    ads_bibcode: Optional[str] = None
+    bibcode: Optional[str] = None  # was ads_bibcode; now the single identity/sync bibcode
+    ads_url: Optional[str] = None
     last_citation_sync: Optional[str] = None  # ISO format string
     # Local PDF
     local_pdf: Optional[str] = None
@@ -73,7 +87,6 @@ class Paper(PaperBase):
     is_published: bool = False  # True if journal publication detected
     doi: Optional[str] = None
     journal_ref: Optional[str] = None
-    ads_bibcode: Optional[str] = None
     last_citation_sync: Optional[datetime] = None
 
     # Local PDF storage

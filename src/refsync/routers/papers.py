@@ -7,7 +7,9 @@ from pydantic import BaseModel
 from ..config import settings
 from ..db import PaperRepository
 from ..models import Paper, PaperCreate, PaperUpdate, SearchQuery, SearchResult
-from ..services import ArxivAPIError, fetch_arxiv_paper
+from ..services import ArxivAPIError  # kept for compatibility
+from ..services.ads import ADSError
+from ..services.resolve import ResolveError, resolve_paper
 
 router = APIRouter(prefix="/api/papers", tags=["papers"])
 
@@ -30,19 +32,23 @@ def set_paper_repo(repo: PaperRepository):
 @router.post("", response_model=Paper)
 async def add_paper(data: PaperCreate, repo: PaperRepository = Depends(get_paper_repo)):
     """
-    Add a paper to the library from an arXiv URL or ID.
+    Add a paper to the library from an arXiv URL/ID or an ADS URL/bibcode.
     """
     try:
-        paper = await fetch_arxiv_paper(data.arxiv_url)
+        paper = await resolve_paper(data.arxiv_url)
+    except ResolveError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     except ArxivAPIError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    except ADSError as e:
+        # e.g. ADS key not configured, or bibcode not found
+        raise HTTPException(status_code=400, detail=str(e))
 
-    # Check if already exists
-    if await repo.exists(paper.arxiv_id):
-        existing = await repo.get(paper.arxiv_id)
+    # Check if already exists (deterministic id dedups arxiv/ADS routes to same paper)
+    if await repo.exists(paper.id):
         raise HTTPException(
             status_code=409,
-            detail="Paper already in library",
+            detail={"message": "Paper already in library", "id": paper.id},
         )
 
     return await repo.create(paper)
@@ -80,48 +86,46 @@ async def search_papers(
     return await repo.search(query)
 
 
-@router.get("/{arxiv_id}", response_model=Paper)
-async def get_paper(arxiv_id: str, repo: PaperRepository = Depends(get_paper_repo)):
-    """Get a specific paper by arXiv ID."""
-    paper = await repo.get(arxiv_id)
+@router.get("/{id}", response_model=Paper)
+async def get_paper(id: str, repo: PaperRepository = Depends(get_paper_repo)):
+    """Get a specific paper by internal id."""
+    paper = await repo.get(id)
     if not paper:
         raise HTTPException(status_code=404, detail="Paper not found")
     return paper
 
 
-@router.patch("/{arxiv_id}", response_model=Paper)
-async def update_paper(
-    arxiv_id: str, data: PaperUpdate, repo: PaperRepository = Depends(get_paper_repo)
-):
+@router.patch("/{id}", response_model=Paper)
+async def update_paper(id: str, data: PaperUpdate, repo: PaperRepository = Depends(get_paper_repo)):
     """Update paper metadata (shelves, tags, status, notes)."""
-    paper = await repo.update(arxiv_id, data)
+    paper = await repo.update(id, data)
     if not paper:
         raise HTTPException(status_code=404, detail="Paper not found")
     return paper
 
 
-@router.delete("/{arxiv_id}")
-async def delete_paper(arxiv_id: str, repo: PaperRepository = Depends(get_paper_repo)):
+@router.delete("/{id}")
+async def delete_paper(id: str, repo: PaperRepository = Depends(get_paper_repo)):
     """Remove a paper from the library."""
     # Delete cover image if exists
-    paper = await repo.get(arxiv_id)
+    paper = await repo.get(id)
     if paper and paper.cover_image:
         cover_path = settings.uploads_dir / paper.cover_image
         if cover_path.exists():
             cover_path.unlink()
 
-    if not await repo.delete(arxiv_id):
+    if not await repo.delete(id):
         raise HTTPException(status_code=404, detail="Paper not found")
 
     return {"status": "deleted"}
 
 
-@router.post("/{arxiv_id}/cover", response_model=Paper)
+@router.post("/{id}/cover", response_model=Paper)
 async def upload_cover(
-    arxiv_id: str, file: UploadFile = File(...), repo: PaperRepository = Depends(get_paper_repo)
+    id: str, file: UploadFile = File(...), repo: PaperRepository = Depends(get_paper_repo)
 ):
     """Upload a cover image for a paper."""
-    paper = await repo.get(arxiv_id)
+    paper = await repo.get(id)
     if not paper:
         raise HTTPException(status_code=404, detail="Paper not found")
 
@@ -132,9 +136,9 @@ async def upload_cover(
             status_code=400, detail=f"Invalid file type. Allowed: {', '.join(allowed_types)}"
         )
 
-    # Generate filename
+    # Generate filename (id is filesystem-safe by construction)
     ext = file.filename.split(".")[-1] if "." in file.filename else "jpg"
-    filename = f"{arxiv_id.replace('/', '_')}_{uuid.uuid4().hex[:8]}.{ext}"
+    filename = f"{id}_{uuid.uuid4().hex[:8]}.{ext}"
 
     # Delete old cover if exists
     if paper.cover_image:
@@ -148,13 +152,13 @@ async def upload_cover(
     with open(file_path, "wb") as f:
         f.write(content)
 
-    return await repo.set_cover(arxiv_id, filename)
+    return await repo.set_cover(id, filename)
 
 
-@router.delete("/{arxiv_id}/cover", response_model=Paper)
-async def delete_cover(arxiv_id: str, repo: PaperRepository = Depends(get_paper_repo)):
+@router.delete("/{id}/cover", response_model=Paper)
+async def delete_cover(id: str, repo: PaperRepository = Depends(get_paper_repo)):
     """Remove a paper's cover image."""
-    paper = await repo.get(arxiv_id)
+    paper = await repo.get(id)
     if not paper:
         raise HTTPException(status_code=404, detail="Paper not found")
 
@@ -163,7 +167,7 @@ async def delete_cover(arxiv_id: str, repo: PaperRepository = Depends(get_paper_
         if cover_path.exists():
             cover_path.unlink()
 
-    return await repo.set_cover(arxiv_id, None)
+    return await repo.set_cover(id, None)
 
 
 @router.post("/sync-citations")
@@ -172,10 +176,6 @@ async def sync_citations(
 ):
     """
     Sync all papers with NASA ADS to get updated citation information.
-
-    Args:
-        only_unsynced: If True, only sync papers that haven't been synced before
-                       or that aren't marked as published yet.
     """
     from ..services.ads import ADSError, sync_papers_with_ads
     from ..services.settings_service import has_ads_api_key
@@ -185,11 +185,9 @@ async def sync_citations(
             status_code=400, detail="ADS API key not configured. Please add your key in Settings."
         )
 
-    # Get papers to sync
     all_papers = await repo.list_all(limit=2000)
 
     if only_unsynced:
-        # Filter to papers that haven't been synced or aren't published yet
         papers_to_sync = [p for p in all_papers if not p.is_published or not p.last_citation_sync]
     else:
         papers_to_sync = all_papers
@@ -201,13 +199,12 @@ async def sync_citations(
             "stats": {"synced": 0, "published": 0, "unchanged": 0},
         }
 
-    # Create update callback
-    async def update_paper(arxiv_id: str, updates: dict):
-        await repo.update(arxiv_id, PaperUpdate(**updates))
+    # Update callback keyed on internal id
+    async def update_paper(id: str, updates: dict):
+        await repo.update(id, PaperUpdate(**updates))
 
     try:
         stats = await sync_papers_with_ads(papers_to_sync, update_paper)
-
         return {
             "status": "success",
             "message": f"Synced {stats['synced']} papers, {stats['published']} published",
@@ -217,16 +214,15 @@ async def sync_citations(
         raise HTTPException(status_code=400, detail=str(e))
 
 
-@router.post("/{arxiv_id}/download-pdf")
-async def download_paper_pdf(arxiv_id: str, repo: PaperRepository = Depends(get_paper_repo)):
+@router.post("/{id}/download-pdf")
+async def download_paper_pdf(id: str, repo: PaperRepository = Depends(get_paper_repo)):
     """Download a paper's PDF for offline viewing."""
     from ..services.pdf import download_pdf
 
-    paper = await repo.get(arxiv_id)
+    paper = await repo.get(id)
     if not paper:
         raise HTTPException(status_code=404, detail="Paper not found")
 
-    # If already downloaded, just return success
     if paper.local_pdf:
         return {"status": "success", "filename": paper.local_pdf, "message": "Already downloaded"}
 
@@ -234,18 +230,16 @@ async def download_paper_pdf(arxiv_id: str, repo: PaperRepository = Depends(get_
     if not filename:
         raise HTTPException(status_code=500, detail="Failed to download PDF")
 
-    # Update paper with local_pdf filename
-    await repo.update(arxiv_id, PaperUpdate(local_pdf=filename))
-
+    await repo.update(id, PaperUpdate(local_pdf=filename))
     return {"status": "success", "filename": filename, "message": "PDF downloaded"}
 
 
-@router.delete("/{arxiv_id}/local-pdf")
-async def delete_paper_pdf(arxiv_id: str, repo: PaperRepository = Depends(get_paper_repo)):
+@router.delete("/{id}/local-pdf")
+async def delete_paper_pdf(id: str, repo: PaperRepository = Depends(get_paper_repo)):
     """Delete a paper's locally stored PDF."""
     from ..services.pdf import delete_local_pdf
 
-    paper = await repo.get(arxiv_id)
+    paper = await repo.get(id)
     if not paper:
         raise HTTPException(status_code=404, detail="Paper not found")
 
@@ -253,27 +247,22 @@ async def delete_paper_pdf(arxiv_id: str, repo: PaperRepository = Depends(get_pa
         raise HTTPException(status_code=404, detail="No local PDF found")
 
     delete_local_pdf(paper.local_pdf)
-
-    # Clear the local_pdf field - need to set to empty string to trigger update
-    await repo.update(arxiv_id, PaperUpdate(local_pdf=""))
-
+    await repo.update(id, PaperUpdate(local_pdf=""))
     return {"status": "success", "message": "Local PDF deleted"}
 
 
 @router.post("/download-pdfs")
-async def download_multiple_pdfs(
-    arxiv_ids: list[str], repo: PaperRepository = Depends(get_paper_repo)
-):
-    """Download PDFs for multiple papers."""
+async def download_multiple_pdfs(ids: list[str], repo: PaperRepository = Depends(get_paper_repo)):
+    """Download PDFs for multiple papers (by internal id)."""
     from ..services.pdf import download_pdf
 
     results = {"downloaded": 0, "already_exists": 0, "failed": 0, "errors": []}
 
-    for arxiv_id in arxiv_ids:
-        paper = await repo.get(arxiv_id)
+    for id in ids:
+        paper = await repo.get(id)
         if not paper:
             results["failed"] += 1
-            results["errors"].append(f"{arxiv_id}: not found")
+            results["errors"].append(f"{id}: not found")
             continue
 
         if paper.local_pdf:
@@ -282,11 +271,11 @@ async def download_multiple_pdfs(
 
         filename = await download_pdf(paper)
         if filename:
-            await repo.update(arxiv_id, PaperUpdate(local_pdf=filename))
+            await repo.update(id, PaperUpdate(local_pdf=filename))
             results["downloaded"] += 1
         else:
             results["failed"] += 1
-            results["errors"].append(f"{arxiv_id}: download failed")
+            results["errors"].append(f"{id}: download failed")
 
     return {
         "status": "success",
@@ -296,7 +285,7 @@ async def download_multiple_pdfs(
 
 
 class BulkUpdateRequest(BaseModel):
-    arxiv_ids: list[str]
+    ids: list[str]
     add_shelves: Optional[list[str]] = None
     remove_shelves: Optional[list[str]] = None
     add_tags: Optional[list[str]] = None
@@ -310,8 +299,8 @@ async def bulk_update_papers(
     """Add/remove shelves and tags for multiple papers at once."""
     updated = 0
 
-    for arxiv_id in data.arxiv_ids:
-        paper = await repo.get(arxiv_id)
+    for id in data.ids:
+        paper = await repo.get(id)
         if not paper:
             continue
 
@@ -344,7 +333,7 @@ async def bulk_update_papers(
                 changed = True
 
         if changed:
-            await repo.update(arxiv_id, PaperUpdate(shelves=new_shelves, tags=new_tags))
+            await repo.update(id, PaperUpdate(shelves=new_shelves, tags=new_tags))
             updated += 1
 
     return {"status": "success", "updated": updated}

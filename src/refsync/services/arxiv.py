@@ -70,9 +70,7 @@ async def fetch_arxiv_paper(url_or_id: str) -> Paper:
             response = await client.get(
                 api_url,
                 timeout=30.0,
-                headers={
-                    "User-Agent": "arXiv-Library/1.0 (Academic paper management tool)"
-                },
+                headers={"User-Agent": "arXiv-Library/1.0 (Academic paper management tool)"},
             )
             response.raise_for_status()
         except httpx.HTTPError as e:

@@ -19,7 +19,7 @@
             <form @submit.prevent="fetchPaper" class="flex gap-3">
                 <input type="text"
                        x-model="arxivUrl"
-                       placeholder="https://arxiv.org/abs/2301.07041 or just 2301.07041"
+                       placeholder="arXiv URL/ID or ADS URL/bibcode (e.g. 2301.07041 or 2020A&amp;A...633A..50S)"
                        class="flex-1 px-4 py-2.5 border border-gray-200 dark:border-gray-600 rounded-lg text-sm
                               bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100
                               focus:outline-none focus:ring-2 focus:ring-arxiv-red/20 focus:border-arxiv-red
@@ -84,7 +84,7 @@
                     <!-- Meta info -->
                     <div class="flex flex-wrap gap-2 text-xs">
                         <span class="px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded text-gray-600 dark:text-gray-400"
-                              x-text="paper.arxiv_id"></span>
+                              x-text="paper.arxiv_id || paper.bibcode"></span>
                         <template x-for="cat in paper.categories.slice(0, 3)" :key="cat">
                             <span class="px-2 py-1 bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 rounded"
                                   x-text="cat"></span>
@@ -93,9 +93,11 @@
                     
                     <!-- Links -->
                     <div class="flex gap-4 text-sm">
-                        <a :href="paper.arxiv_url" target="_blank"
+                        <a x-show="paper.arxiv_url" :href="paper.arxiv_url" target="_blank"
                            class="text-arxiv-red hover:underline">arXiv Page</a>
-                        <a :href="paper.pdf_url" target="_blank"
+                        <a x-show="!paper.arxiv_url && paper.ads_url" :href="paper.ads_url" target="_blank"
+                           class="text-arxiv-red hover:underline">ADS Page</a>
+                        <a x-show="paper.pdf_url" :href="paper.pdf_url" target="_blank"
                            class="text-arxiv-red hover:underline">PDF</a>
                     </div>
                 </div>
@@ -246,7 +248,7 @@
          class="mt-4 p-4 bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800 rounded-lg">
         <p class="text-sm text-blue-800 dark:text-blue-300">
             This paper is already in your library.
-            <a :href="'/paper/' + existingPaper.arxiv_id" class="underline font-medium">View it here</a>
+            <a :href="'/paper/' + existingPaper.id" class="underline font-medium">View it here</a>
         </p>
     </div>
 </div>
@@ -306,12 +308,12 @@ function addPaper() {
                 });
                 
                 if (res.status === 409) {
-                    // Paper already exists
+                    // Paper already exists. The backend returns the existing
+                    // paper's internal id in the error detail.
                     const data = await res.json();
-                    // Fetch the existing paper
-                    const parsed = this.arxivUrl.match(/(\d{4}\.\d{4,5})/);
-                    if (parsed) {
-                        const existingRes = await fetch(`/api/papers/${parsed[1]}`);
+                    const existingId = data.detail && data.detail.id;
+                    if (existingId) {
+                        const existingRes = await fetch(`/api/papers/${existingId}`);
                         if (existingRes.ok) {
                             this.existingPaper = await existingRes.json();
                         }
@@ -418,7 +420,7 @@ function addPaper() {
             
             try {
                 // Update paper with organization data
-                const res = await fetch(`/api/papers/${this.paper.arxiv_id}`, {
+                const res = await fetch(`/api/papers/${this.paper.id}`, {
                     method: 'PATCH',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -435,7 +437,7 @@ function addPaper() {
                 
                 // Download PDF if requested
                 if (this.downloadPdf) {
-                    const pdfRes = await fetch(`/api/papers/${this.paper.arxiv_id}/download-pdf`, {
+                    const pdfRes = await fetch(`/api/papers/${this.paper.id}/download-pdf`, {
                         method: 'POST'
                     });
                     if (!pdfRes.ok) {

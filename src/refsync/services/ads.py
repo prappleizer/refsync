@@ -2,11 +2,16 @@
 NASA ADS API service for syncing citations.
 """
 
+import re
 from datetime import datetime
 from typing import Optional
 
 import httpx
 
+from ..models import Paper
+from .ads_parse import ads_abstract_url, ads_eprint_pdf_url
+from .bibtex import generate_cite_key, update_cite_key_in_bibtex
+from .identifiers import make_paper_id
 from .settings_service import get_ads_api_key
 
 ADS_API_BASE = "https://api.adsabs.harvard.edu/v1"
@@ -120,9 +125,7 @@ class ADSClient:
         bibtex_str = data.get("export", "")
         return self._parse_bibtex_entries(bibtex_str, bibcodes)
 
-    def _parse_bibtex_entries(
-        self, bibtex_str: str, bibcodes: list[str]
-    ) -> dict[str, str]:
+    def _parse_bibtex_entries(self, bibtex_str: str, bibcodes: list[str]) -> dict[str, str]:
         """Parse a combined BibTeX string into individual entries by bibcode."""
         results = {}
 
@@ -268,11 +271,7 @@ async def sync_papers_with_ads(papers: list, update_callback) -> dict:
                 if is_pub:
                     pub = ads_record.get("pub", "")
                     vol = ads_record.get("volume", "")
-                    page = (
-                        ads_record.get("page", [""])[0]
-                        if ads_record.get("page")
-                        else ""
-                    )
+                    page = ads_record.get("page", [""])[0] if ads_record.get("page") else ""
                     if pub:
                         journal_ref = pub
                         if vol:
@@ -307,3 +306,127 @@ async def sync_papers_with_ads(papers: list, update_callback) -> dict:
         raise ADSError(f"Sync failed: {str(e)}")
 
     return stats
+
+
+def _parse_ads_pubdate(pubdate: Optional[str], year: Optional[int] = None) -> Optional[datetime]:
+    """
+    Parse an ADS pubdate string into a datetime.
+
+    ADS pubdates look like "2025-05-00" where the day (and sometimes the month)
+    can be "00" to mean "unknown". We coerce zeros to 01 so the value is a valid
+    date. Falls back to the `year` field (Jan 1) if pubdate is missing/garbage,
+    and to None if we have nothing at all.
+    """
+    if pubdate:
+        m = re.match(r"(\d{4})-(\d{2})-(\d{2})", pubdate)
+        if m:
+            y, mo, d = (int(x) for x in m.groups())
+            mo = mo if 1 <= mo <= 12 else 1
+            d = d if 1 <= d <= 28 else 1  # clamp to 28 to avoid month-length issues
+            return datetime(y, mo, d)
+    if year:
+        return datetime(int(year), 1, 1)
+    return None
+
+
+async def fetch_ads_paper(bibcode: str) -> "Paper":
+    """
+    Fetch paper metadata from ADS by bibcode and build a Paper.
+
+    Used for papers that are only on ADS (never on arXiv, or not yet ingested by
+    arXiv). Requires an ADS API key to be configured; raises ADSError otherwise.
+
+    Raises:
+        ADSError: if no key is configured, the API errors, or the bibcode is
+                  not found.
+    """
+    client = ADSClient()  # raises ADSError("ADS API key not configured") if unset
+
+    params = {
+        "q": f"bibcode:{bibcode}",
+        "fl": ("bibcode,title,author,abstract,year,pubdate,pub,volume,page,doi,doctype,identifier"),
+        "rows": 1,
+    }
+
+    async with httpx.AsyncClient(timeout=30.0) as http:
+        response = await http.get(
+            f"{ADS_API_BASE}/search/query", params=params, headers=client.headers
+        )
+        if response.status_code == 401:
+            raise ADSError("Invalid ADS API key")
+        elif response.status_code == 429:
+            raise ADSError("ADS rate limit exceeded. Please try again later.")
+        elif response.status_code != 200:
+            raise ADSError(f"ADS API error: {response.status_code}")
+        data = response.json()
+
+    docs = data.get("response", {}).get("docs", [])
+    if not docs:
+        raise ADSError(f"No ADS record found for bibcode: {bibcode}")
+    doc = docs[0]
+    resolved_bibcode = doc.get("bibcode", bibcode)
+
+    # Fetch BibTeX for this bibcode (reuses the existing export endpoint helper)
+    bibtex: Optional[str] = None
+    try:
+        bibtex_map = await client.get_bibtex([resolved_bibcode])
+        bibtex = bibtex_map.get(resolved_bibcode)
+    except ADSError:
+        # Non-fatal: we can still add the paper without BibTeX; sync can fill later.
+        bibtex = None
+
+    # Metadata extraction (ADS returns most fields as lists)
+    title = (doc.get("title") or ["Untitled"])[0]
+    authors = doc.get("author", []) or []
+    abstract = doc.get("abstract")
+    published = _parse_ads_pubdate(doc.get("pubdate"), doc.get("year"))
+
+    doi = doc.get("doi")
+    if isinstance(doi, list):
+        doi = doi[0] if doi else None
+
+    is_pub = client.is_published(doc)
+
+    # Build a journal_ref string if published
+    journal_ref = None
+    if is_pub:
+        pub = doc.get("pub", "")
+        vol = doc.get("volume", "")
+        page = (doc.get("page", [""]) or [""])[0]
+        if pub:
+            journal_ref = pub
+            if vol:
+                journal_ref += f", {vol}"
+            if page:
+                journal_ref += f", {page}"
+
+    paper = Paper(
+        id=make_paper_id(bibcode=resolved_bibcode),
+        arxiv_id=None,
+        bibcode=resolved_bibcode,
+        source="ads",
+        title=title,
+        authors=authors,
+        abstract=abstract,
+        categories=[],
+        published=published,
+        updated=published,
+        pdf_url=ads_eprint_pdf_url(resolved_bibcode),
+        arxiv_url=None,
+        ads_url=ads_abstract_url(resolved_bibcode),
+        added_at=datetime.utcnow(),
+        doi=doi,
+        journal_ref=journal_ref,
+        is_published=is_pub,
+    )
+
+    # Cite key + BibTeX
+    paper.cite_key = generate_cite_key(paper)
+    if bibtex:
+        if paper.cite_key:
+            bibtex = update_cite_key_in_bibtex(bibtex, paper.cite_key)
+        paper.bibtex = bibtex
+        paper.bibtex_source = "ads"
+        paper.last_citation_sync = datetime.utcnow()
+
+    return paper

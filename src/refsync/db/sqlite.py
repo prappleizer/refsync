@@ -21,6 +21,10 @@ from ..models import (
 from .base import PaperRepository, ShelfRepository, TagRepository
 
 
+def _dt(value: Optional[str]) -> Optional[datetime]:
+    return datetime.fromisoformat(value) if value else None
+
+
 class SQLiteDatabase:
     """SQLite database connection manager"""
 
@@ -44,17 +48,23 @@ class SQLiteDatabase:
         return self._connection
 
     async def _create_tables(self):
+        # NOTE: for existing databases, run migrate_ids.py first. This CREATE is
+        # for fresh installs and matches the post-migration schema.
         await self.conn.executescript("""
             CREATE TABLE IF NOT EXISTS papers (
-                arxiv_id TEXT PRIMARY KEY,
+                id TEXT PRIMARY KEY,
+                arxiv_id TEXT,
+                bibcode TEXT,
+                source TEXT DEFAULT 'arxiv',
                 title TEXT NOT NULL,
                 authors TEXT NOT NULL,  -- JSON array
-                abstract TEXT NOT NULL,
-                categories TEXT NOT NULL,  -- JSON array
-                published TEXT NOT NULL,
-                updated TEXT NOT NULL,
-                pdf_url TEXT NOT NULL,
-                arxiv_url TEXT NOT NULL,
+                abstract TEXT,
+                categories TEXT NOT NULL DEFAULT '[]',  -- JSON array
+                published TEXT,
+                updated TEXT,
+                pdf_url TEXT,
+                arxiv_url TEXT,
+                ads_url TEXT,
                 shelves TEXT DEFAULT '[]',  -- JSON array
                 tags TEXT DEFAULT '[]',  -- JSON array
                 status TEXT DEFAULT '',
@@ -68,26 +78,25 @@ class SQLiteDatabase:
                 is_published INTEGER DEFAULT 0,
                 doi TEXT,
                 journal_ref TEXT,
-                ads_bibcode TEXT,
                 last_citation_sync TEXT,
                 local_pdf TEXT
             );
-            
+
             CREATE TABLE IF NOT EXISTS shelves (
                 id TEXT PRIMARY KEY,
                 name TEXT UNIQUE NOT NULL,
                 description TEXT,
                 created_at TEXT NOT NULL
             );
-            
+
             CREATE TABLE IF NOT EXISTS tags (
                 name TEXT PRIMARY KEY,
                 color TEXT
             );
-            
-            -- Full-text search virtual table
+
+            -- Full-text search virtual table (external content, keyed on rowid).
+            -- We index only the searchable text; matches map back to papers via rowid.
             CREATE VIRTUAL TABLE IF NOT EXISTS papers_fts USING fts5(
-                arxiv_id,
                 title,
                 authors,
                 abstract,
@@ -95,23 +104,24 @@ class SQLiteDatabase:
                 content='papers',
                 content_rowid='rowid'
             );
-            
-            -- Triggers to keep FTS in sync
+
+            -- Triggers keep FTS in sync. The 'delete' command MUST pass old.rowid
+            -- as its first value or the external-content index corrupts.
             CREATE TRIGGER IF NOT EXISTS papers_ai AFTER INSERT ON papers BEGIN
-                INSERT INTO papers_fts(arxiv_id, title, authors, abstract, notes)
-                VALUES (new.arxiv_id, new.title, new.authors, new.abstract, new.notes);
+                INSERT INTO papers_fts(rowid, title, authors, abstract, notes)
+                VALUES (new.rowid, new.title, new.authors, new.abstract, new.notes);
             END;
-            
+
             CREATE TRIGGER IF NOT EXISTS papers_ad AFTER DELETE ON papers BEGIN
-                INSERT INTO papers_fts(papers_fts, arxiv_id, title, authors, abstract, notes)
-                VALUES ('delete', old.arxiv_id, old.title, old.authors, old.abstract, old.notes);
+                INSERT INTO papers_fts(papers_fts, rowid, title, authors, abstract, notes)
+                VALUES ('delete', old.rowid, old.title, old.authors, old.abstract, old.notes);
             END;
-            
+
             CREATE TRIGGER IF NOT EXISTS papers_au AFTER UPDATE ON papers BEGIN
-                INSERT INTO papers_fts(papers_fts, arxiv_id, title, authors, abstract, notes)
-                VALUES ('delete', old.arxiv_id, old.title, old.authors, old.abstract, old.notes);
-                INSERT INTO papers_fts(arxiv_id, title, authors, abstract, notes)
-                VALUES (new.arxiv_id, new.title, new.authors, new.abstract, new.notes);
+                INSERT INTO papers_fts(papers_fts, rowid, title, authors, abstract, notes)
+                VALUES ('delete', old.rowid, old.title, old.authors, old.abstract, old.notes);
+                INSERT INTO papers_fts(rowid, title, authors, abstract, notes)
+                VALUES (new.rowid, new.title, new.authors, new.abstract, new.notes);
             END;
         """)
         await self.conn.commit()
@@ -124,59 +134,70 @@ class SQLitePaperRepository(PaperRepository):
         self.db = db
 
     def _row_to_paper(self, row: aiosqlite.Row) -> Paper:
+        keys = row.keys()
         return Paper(
-            arxiv_id=row["arxiv_id"],
+            id=row["id"],
+            arxiv_id=row["arxiv_id"] if "arxiv_id" in keys else None,
+            bibcode=row["bibcode"] if "bibcode" in keys else None,
+            source=row["source"] if "source" in keys and row["source"] else "arxiv",
             title=row["title"],
             authors=json.loads(row["authors"]),
             abstract=row["abstract"],
-            categories=json.loads(row["categories"]),
-            published=datetime.fromisoformat(row["published"]),
-            updated=datetime.fromisoformat(row["updated"]),
+            categories=json.loads(row["categories"]) if row["categories"] else [],
+            published=_dt(row["published"]),
+            updated=_dt(row["updated"]),
             pdf_url=row["pdf_url"],
             arxiv_url=row["arxiv_url"],
+            ads_url=row["ads_url"] if "ads_url" in keys else None,
             shelves=json.loads(row["shelves"]),
             tags=json.loads(row["tags"]),
             status=ReadingStatus(row["status"]) if row["status"] else ReadingStatus.UNSET,
             starred=bool(row["starred"]) if row["starred"] is not None else False,
             notes=row["notes"],
             cover_image=row["cover_image"],
-            added_at=datetime.fromisoformat(row["added_at"]),
-            bibtex=row["bibtex"] if "bibtex" in row.keys() else None,
-            bibtex_source=row["bibtex_source"] if "bibtex_source" in row.keys() else "arxiv",
-            cite_key=row["cite_key"] if "cite_key" in row.keys() else None,
+            added_at=_dt(row["added_at"]) or datetime.utcnow(),
+            bibtex=row["bibtex"] if "bibtex" in keys else None,
+            bibtex_source=row["bibtex_source"]
+            if "bibtex_source" in keys and row["bibtex_source"]
+            else "arxiv",
+            cite_key=row["cite_key"] if "cite_key" in keys else None,
             is_published=bool(row["is_published"])
-            if "is_published" in row.keys() and row["is_published"] is not None
+            if "is_published" in keys and row["is_published"] is not None
             else False,
-            doi=row["doi"] if "doi" in row.keys() else None,
-            journal_ref=row["journal_ref"] if "journal_ref" in row.keys() else None,
-            ads_bibcode=row["ads_bibcode"] if "ads_bibcode" in row.keys() else None,
-            last_citation_sync=datetime.fromisoformat(row["last_citation_sync"])
-            if "last_citation_sync" in row.keys() and row["last_citation_sync"]
+            doi=row["doi"] if "doi" in keys else None,
+            journal_ref=row["journal_ref"] if "journal_ref" in keys else None,
+            last_citation_sync=_dt(row["last_citation_sync"])
+            if "last_citation_sync" in keys and row["last_citation_sync"]
             else None,
-            local_pdf=row["local_pdf"] if "local_pdf" in row.keys() else None,
+            local_pdf=row["local_pdf"] if "local_pdf" in keys else None,
         )
 
     async def create(self, paper: Paper) -> Paper:
         await self.db.conn.execute(
             """
             INSERT INTO papers (
-                arxiv_id, title, authors, abstract, categories,
-                published, updated, pdf_url, arxiv_url,
+                id, arxiv_id, bibcode, source,
+                title, authors, abstract, categories,
+                published, updated, pdf_url, arxiv_url, ads_url,
                 shelves, tags, status, starred, notes, cover_image, added_at,
-                bibtex, bibtex_source, cite_key, is_published, doi, journal_ref, ads_bibcode, last_citation_sync,
-                local_pdf
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                bibtex, bibtex_source, cite_key, is_published, doi, journal_ref,
+                last_citation_sync, local_pdf
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
             (
+                paper.id,
                 paper.arxiv_id,
+                paper.bibcode,
+                paper.source,
                 paper.title,
                 json.dumps(paper.authors),
                 paper.abstract,
                 json.dumps(paper.categories),
-                paper.published.isoformat(),
-                paper.updated.isoformat(),
+                paper.published.isoformat() if paper.published else None,
+                paper.updated.isoformat() if paper.updated else None,
                 paper.pdf_url,
                 paper.arxiv_url,
+                paper.ads_url,
                 json.dumps(paper.shelves),
                 json.dumps(paper.tags),
                 paper.status.value,
@@ -190,7 +211,6 @@ class SQLitePaperRepository(PaperRepository):
                 int(paper.is_published),
                 paper.doi,
                 paper.journal_ref,
-                paper.ads_bibcode,
                 paper.last_citation_sync.isoformat() if paper.last_citation_sync else None,
                 paper.local_pdf,
             ),
@@ -198,15 +218,13 @@ class SQLitePaperRepository(PaperRepository):
         await self.db.conn.commit()
         return paper
 
-    async def get(self, arxiv_id: str) -> Optional[Paper]:
-        async with self.db.conn.execute(
-            "SELECT * FROM papers WHERE arxiv_id = ?", (arxiv_id,)
-        ) as cursor:
+    async def get(self, id: str) -> Optional[Paper]:
+        async with self.db.conn.execute("SELECT * FROM papers WHERE id = ?", (id,)) as cursor:
             row = await cursor.fetchone()
             return self._row_to_paper(row) if row else None
 
-    async def update(self, arxiv_id: str, data: PaperUpdate) -> Optional[Paper]:
-        paper = await self.get(arxiv_id)
+    async def update(self, id: str, data: PaperUpdate) -> Optional[Paper]:
+        paper = await self.get(id)
         if not paper:
             return None
 
@@ -247,9 +265,12 @@ class SQLitePaperRepository(PaperRepository):
         if data.journal_ref is not None:
             updates.append("journal_ref = ?")
             values.append(data.journal_ref)
-        if data.ads_bibcode is not None:
-            updates.append("ads_bibcode = ?")
-            values.append(data.ads_bibcode)
+        if data.bibcode is not None:
+            updates.append("bibcode = ?")
+            values.append(data.bibcode)
+        if data.ads_url is not None:
+            updates.append("ads_url = ?")
+            values.append(data.ads_url)
         if data.last_citation_sync is not None:
             updates.append("last_citation_sync = ?")
             values.append(data.last_citation_sync)
@@ -259,16 +280,16 @@ class SQLitePaperRepository(PaperRepository):
             values.append(data.local_pdf if data.local_pdf else None)
 
         if updates:
-            values.append(arxiv_id)
+            values.append(id)
             await self.db.conn.execute(
-                f"UPDATE papers SET {', '.join(updates)} WHERE arxiv_id = ?", values
+                f"UPDATE papers SET {', '.join(updates)} WHERE id = ?", values
             )
             await self.db.conn.commit()
 
-        return await self.get(arxiv_id)
+        return await self.get(id)
 
-    async def delete(self, arxiv_id: str) -> bool:
-        cursor = await self.db.conn.execute("DELETE FROM papers WHERE arxiv_id = ?", (arxiv_id,))
+    async def delete(self, id: str) -> bool:
+        cursor = await self.db.conn.execute("DELETE FROM papers WHERE id = ?", (id,))
         await self.db.conn.commit()
         return cursor.rowcount > 0
 
@@ -283,13 +304,9 @@ class SQLitePaperRepository(PaperRepository):
         conditions = []
         params = []
 
-        # Full-text search
+        # Full-text search — map FTS matches back to papers via rowid.
         if query.q:
-            conditions.append("""
-                arxiv_id IN (
-                    SELECT arxiv_id FROM papers_fts WHERE papers_fts MATCH ?
-                )
-            """)
+            conditions.append("rowid IN (SELECT rowid FROM papers_fts WHERE papers_fts MATCH ?)")
             # Escape special FTS characters and create search term
             search_term = query.q.replace('"', '""')
             params.append(f'"{search_term}"')
@@ -321,7 +338,7 @@ class SQLitePaperRepository(PaperRepository):
 
         # Get results
         async with self.db.conn.execute(
-            f"""SELECT * FROM papers WHERE {where_clause} 
+            f"""SELECT * FROM papers WHERE {where_clause}
                 ORDER BY added_at DESC LIMIT ? OFFSET ?""",
             params + [query.limit, query.offset],
         ) as cursor:
@@ -330,18 +347,16 @@ class SQLitePaperRepository(PaperRepository):
 
         return SearchResult(papers=papers, total=total)
 
-    async def exists(self, arxiv_id: str) -> bool:
-        async with self.db.conn.execute(
-            "SELECT 1 FROM papers WHERE arxiv_id = ?", (arxiv_id,)
-        ) as cursor:
+    async def exists(self, id: str) -> bool:
+        async with self.db.conn.execute("SELECT 1 FROM papers WHERE id = ?", (id,)) as cursor:
             return await cursor.fetchone() is not None
 
-    async def set_cover(self, arxiv_id: str, cover_path: str) -> Optional[Paper]:
+    async def set_cover(self, id: str, cover_path: Optional[str]) -> Optional[Paper]:
         await self.db.conn.execute(
-            "UPDATE papers SET cover_image = ? WHERE arxiv_id = ?", (cover_path, arxiv_id)
+            "UPDATE papers SET cover_image = ? WHERE id = ?", (cover_path, id)
         )
         await self.db.conn.commit()
-        return await self.get(arxiv_id)
+        return await self.get(id)
 
 
 class SQLiteShelfRepository(ShelfRepository):
@@ -408,17 +423,17 @@ class SQLiteShelfRepository(ShelfRepository):
         return await self.get(shelf_id)
 
     async def delete(self, shelf_id: str) -> bool:
-        # First remove shelf from all papers
+        # First remove shelf from all papers (papers reference shelves by id in a JSON array)
         async with self.db.conn.execute(
-            "SELECT arxiv_id, shelves FROM papers WHERE shelves LIKE ?", (f'%"{shelf_id}"%',)
+            "SELECT id, shelves FROM papers WHERE shelves LIKE ?", (f'%"{shelf_id}"%',)
         ) as cursor:
             rows = await cursor.fetchall()
             for row in rows:
                 shelves = json.loads(row["shelves"])
                 shelves = [s for s in shelves if s != shelf_id]
                 await self.db.conn.execute(
-                    "UPDATE papers SET shelves = ? WHERE arxiv_id = ?",
-                    (json.dumps(shelves), row["arxiv_id"]),
+                    "UPDATE papers SET shelves = ? WHERE id = ?",
+                    (json.dumps(shelves), row["id"]),
                 )
 
         cursor = await self.db.conn.execute("DELETE FROM shelves WHERE id = ?", (shelf_id,))
@@ -465,15 +480,15 @@ class SQLiteTagRepository(TagRepository):
     async def delete(self, name: str) -> bool:
         # First remove tag from all papers
         async with self.db.conn.execute(
-            "SELECT arxiv_id, tags FROM papers WHERE tags LIKE ?", (f'%"{name}"%',)
+            "SELECT id, tags FROM papers WHERE tags LIKE ?", (f'%"{name}"%',)
         ) as cursor:
             rows = await cursor.fetchall()
             for row in rows:
                 tags = json.loads(row["tags"])
                 tags = [t for t in tags if t != name]
                 await self.db.conn.execute(
-                    "UPDATE papers SET tags = ? WHERE arxiv_id = ?",
-                    (json.dumps(tags), row["arxiv_id"]),
+                    "UPDATE papers SET tags = ? WHERE id = ?",
+                    (json.dumps(tags), row["id"]),
                 )
 
         cursor = await self.db.conn.execute("DELETE FROM tags WHERE name = ?", (name,))
@@ -501,15 +516,15 @@ class SQLiteTagRepository(TagRepository):
 
         # Cascade: update all papers that reference this tag
         async with self.db.conn.execute(
-            "SELECT arxiv_id, tags FROM papers WHERE tags LIKE ?", (f'%"{old_name}"%',)
+            "SELECT id, tags FROM papers WHERE tags LIKE ?", (f'%"{old_name}"%',)
         ) as cursor:
             rows = await cursor.fetchall()
             for row in rows:
                 tags = json.loads(row["tags"])
                 tags = [new_name if t == old_name else t for t in tags]
                 await self.db.conn.execute(
-                    "UPDATE papers SET tags = ? WHERE arxiv_id = ?",
-                    (json.dumps(tags), row["arxiv_id"]),
+                    "UPDATE papers SET tags = ? WHERE id = ?",
+                    (json.dumps(tags), row["id"]),
                 )
 
         await self.db.conn.commit()

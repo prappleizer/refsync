@@ -457,7 +457,7 @@
              'grid-cols-1 lg:grid-cols-2': cardSize === 'large'
          }"
          class="grid gap-4">
-        <template x-for="paper in filteredPapers" :key="paper.arxiv_id">
+        <template x-for="paper in filteredPapers" :key="paper.id">
             <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden hover:shadow-md transition-shadow relative"
                  @mouseenter="showPreview(paper, $el)"
                  @mouseleave="hidePreview()">
@@ -482,12 +482,12 @@
                         <div class="flex items-center gap-2">
                             <!-- Selection checkbox -->
                             <input type="checkbox" 
-                                   :checked="isSelected(paper.arxiv_id)"
-                                   @click.stop="toggleSelect(paper.arxiv_id)"
+                                   :checked="isSelected(paper.id)"
+                                   @click.stop="toggleSelect(paper.id)"
                                    class="w-4 h-4 rounded border-gray-300 dark:border-gray-600 text-blue-600 
                                           focus:ring-blue-500 dark:bg-gray-700 cursor-pointer">
                             <span class="text-xs text-gray-500 dark:text-gray-400" 
-                                  x-text="new Date(paper.published).toLocaleDateString('en-US', {year: 'numeric', month: 'short', day: 'numeric'})"></span>
+                                  x-text="formatDate(paper.published)"></span>
                             <!-- Local PDF indicator -->
                             <span x-show="paper.local_pdf" class="text-green-500" title="Saved offline">
                                 <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
@@ -506,7 +506,7 @@
                     </div>
                     
                     <!-- Title -->
-                    <a :href="'/paper/' + paper.arxiv_id"
+                    <a :href="'/paper/' + paper.id"
                        class="block text-sm font-medium text-gray-900 dark:text-gray-100 hover:text-arxiv-red mb-2"
                        :class="cardSize === 'small' ? 'line-clamp-2' : 'line-clamp-3'"
                        x-html="paper.title"></a>
@@ -534,10 +534,11 @@
                     
                     <!-- Footer -->
                     <div class="flex items-center justify-between text-xs text-gray-400 dark:text-gray-500">
-                        <span x-text="paper.arxiv_id"></span>
+                        <span x-text="paper.arxiv_id || paper.bibcode"></span>
                         <div class="flex gap-2">
-                            <a :href="paper.arxiv_url" target="_blank" class="hover:text-arxiv-red">arXiv</a>
-                            <a :href="paper.pdf_url" target="_blank" class="hover:text-arxiv-red">PDF</a>
+                            <a x-show="paper.arxiv_url" :href="paper.arxiv_url" target="_blank" class="hover:text-arxiv-red">arXiv</a>
+                            <a x-show="!paper.arxiv_url && paper.ads_url" :href="paper.ads_url" target="_blank" class="hover:text-arxiv-red">ADS</a>
+                            <a x-show="paper.pdf_url" :href="paper.pdf_url" target="_blank" class="hover:text-arxiv-red">PDF</a>
                         </div>
                     </div>
                 </div>
@@ -559,16 +560,16 @@
         </div>
         
         <!-- List Items -->
-        <template x-for="paper in filteredPapers" :key="paper.arxiv_id">
+        <template x-for="paper in filteredPapers" :key="paper.id">
             <div class="grid grid-cols-12 gap-4 px-4 py-3 border-b border-gray-100 dark:border-gray-700/50 hover:bg-gray-50 dark:hover:bg-gray-700/30 items-center text-sm"
-                 :class="isSelected(paper.arxiv_id) ? 'bg-blue-50 dark:bg-blue-900/20' : ''"
+                 :class="isSelected(paper.id) ? 'bg-blue-50 dark:bg-blue-900/20' : ''"
                  @mouseenter="showPreview(paper, $el)"
                  @mouseleave="hidePreview()">
                 <!-- Checkbox + Star -->
                 <div class="col-span-1 flex items-center gap-2">
                     <input type="checkbox" 
-                           :checked="isSelected(paper.arxiv_id)"
-                           @click.stop="toggleSelect(paper.arxiv_id)"
+                           :checked="isSelected(paper.id)"
+                           @click.stop="toggleSelect(paper.id)"
                            class="w-4 h-4 rounded border-gray-300 dark:border-gray-600 text-blue-600 
                                   focus:ring-blue-500 dark:bg-gray-700 cursor-pointer">
                     <button @click.prevent="toggleStar(paper)" 
@@ -582,10 +583,10 @@
                 
                 <!-- Title -->
                 <div class="col-span-4">
-                    <a :href="'/paper/' + paper.arxiv_id"
+                    <a :href="'/paper/' + paper.id"
                        class="text-gray-900 dark:text-gray-100 hover:text-arxiv-red line-clamp-1 font-medium"
                        x-html="paper.title"></a>
-                    <span class="text-xs text-gray-400 dark:text-gray-500 ml-1" x-text="paper.arxiv_id"></span>
+                    <span class="text-xs text-gray-400 dark:text-gray-500 ml-1" x-text="paper.arxiv_id || paper.bibcode"></span>
                     <!-- Local PDF indicator -->
                     <span x-show="paper.local_pdf" class="text-green-500 ml-1" title="Saved offline">
                         <svg class="w-3 h-3 inline" fill="currentColor" viewBox="0 0 20 20">
@@ -601,7 +602,7 @@
                 
                 <!-- Date -->
                 <div class="col-span-1 text-gray-500 dark:text-gray-400 text-xs">
-                    <span x-text="new Date(paper.published).toISOString().slice(0, 10).replace(/-/g, '/')"></span>
+                    <span x-text="formatDateSlash(paper.published)"></span>
                 </div>
                 
                 <!-- Tags -->
@@ -617,8 +618,9 @@
                 
                 <!-- Links -->
                 <div class="col-span-2 text-right text-xs space-x-2">
-                    <a :href="paper.arxiv_url" target="_blank" class="text-gray-400 hover:text-arxiv-red dark:hover:text-red-400">arXiv</a>
-                    <a :href="paper.pdf_url" target="_blank" class="text-gray-400 hover:text-arxiv-red dark:hover:text-red-400">PDF</a>
+                    <a x-show="paper.arxiv_url" :href="paper.arxiv_url" target="_blank" class="text-gray-400 hover:text-arxiv-red dark:hover:text-red-400">arXiv</a>
+                    <a x-show="!paper.arxiv_url && paper.ads_url" :href="paper.ads_url" target="_blank" class="text-gray-400 hover:text-arxiv-red dark:hover:text-red-400">ADS</a>
+                    <a x-show="paper.pdf_url" :href="paper.pdf_url" target="_blank" class="text-gray-400 hover:text-arxiv-red dark:hover:text-red-400">PDF</a>
                 </div>
             </div>
         </template>
@@ -736,7 +738,8 @@ function library() {
                         paper.abstract,
                         paper.authors.join(' '),
                         paper.notes || '',
-                        paper.arxiv_id,
+                        paper.arxiv_id || '',
+                        paper.bibcode || '',
                         paper.tags.join(' ')
                     ].join(' ').toLowerCase();
                     return searchable.includes(query);
@@ -836,7 +839,7 @@ function library() {
         async toggleStar(paper) {
             const newStarred = !paper.starred;
             try {
-                const res = await fetch(`/api/papers/${paper.arxiv_id}`, {
+                const res = await fetch(`/api/papers/${paper.id}`, {
                     method: 'PATCH',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ starred: newStarred })
@@ -931,27 +934,27 @@ function library() {
         getEffectiveSelection() {
             // If papers are selected, use those; otherwise use all filtered papers
             if (this.selectedPapers.size > 0) {
-                return this.filteredPapers.filter(p => this.selectedPapers.has(p.arxiv_id));
+                return this.filteredPapers.filter(p => this.selectedPapers.has(p.id));
             }
             return this.filteredPapers;
         },
         
-        toggleSelect(arxivId) {
-            if (this.selectedPapers.has(arxivId)) {
-                this.selectedPapers.delete(arxivId);
+        toggleSelect(id) {
+            if (this.selectedPapers.has(id)) {
+                this.selectedPapers.delete(id);
             } else {
-                this.selectedPapers.add(arxivId);
+                this.selectedPapers.add(id);
             }
             // Force reactivity
             this.selectedPapers = new Set(this.selectedPapers);
         },
         
-        isSelected(arxivId) {
-            return this.selectedPapers.has(arxivId);
+        isSelected(id) {
+            return this.selectedPapers.has(id);
         },
         
         selectAll() {
-            this.filteredPapers.forEach(p => this.selectedPapers.add(p.arxiv_id));
+            this.filteredPapers.forEach(p => this.selectedPapers.add(p.id));
             this.selectedPapers = new Set(this.selectedPapers);
         },
         
@@ -964,7 +967,7 @@ function library() {
             if (this.downloadingPdfs) return;
             
             const papers = this.getEffectiveSelection();
-            const toDownload = papers.filter(p => !p.local_pdf).map(p => p.arxiv_id);
+            const toDownload = papers.filter(p => !p.local_pdf).map(p => p.id);
             
             if (toDownload.length === 0) {
                 showToast('All selected papers already have local PDFs', 'info');
@@ -1011,6 +1014,21 @@ function library() {
                 }
             }
             return authors.length > 1 ? `${lastName} et al.` : lastName;
+        },
+        
+        // Date formatting (tolerant of missing dates on ADS-only papers)
+        formatDate(value) {
+            if (!value) return '—';
+            const d = new Date(value);
+            if (isNaN(d)) return '—';
+            return d.toLocaleDateString('en-US', {year: 'numeric', month: 'short', day: 'numeric'});
+        },
+        
+        formatDateSlash(value) {
+            if (!value) return '—';
+            const d = new Date(value);
+            if (isNaN(d)) return '—';
+            return d.toISOString().slice(0, 10).replace(/-/g, '/');
         },
         
         // Abstract preview functions
@@ -1222,7 +1240,7 @@ function library() {
         async bulkAddShelf(shelfId) {
             const ids = [...this.selectedPapers];
             const shelf = this.shelves.find(s => s.id === shelfId);
-            const count = await this._bulkUpdate({ arxiv_ids: ids, add_shelves: [shelfId] });
+            const count = await this._bulkUpdate({ ids: ids, add_shelves: [shelfId] });
             if (count > 0) {
                 showToast(`Added ${count} paper(s) to "${shelf?.name || shelfId}"`, 'success');
                 await Promise.all([this.loadShelvesAndTags(), this.loadAllPapers()]);
@@ -1234,7 +1252,7 @@ function library() {
         async bulkRemoveShelf(shelfId) {
             const ids = [...this.selectedPapers];
             const shelf = this.shelves.find(s => s.id === shelfId);
-            const count = await this._bulkUpdate({ arxiv_ids: ids, remove_shelves: [shelfId] });
+            const count = await this._bulkUpdate({ ids: ids, remove_shelves: [shelfId] });
             if (count > 0) {
                 showToast(`Removed ${count} paper(s) from "${shelf?.name || shelfId}"`, 'success');
                 await Promise.all([this.loadShelvesAndTags(), this.loadAllPapers()]);
@@ -1245,7 +1263,7 @@ function library() {
         
         async bulkAddTag(tagName) {
             const ids = [...this.selectedPapers];
-            const count = await this._bulkUpdate({ arxiv_ids: ids, add_tags: [tagName] });
+            const count = await this._bulkUpdate({ ids: ids, add_tags: [tagName] });
             if (count > 0) {
                 showToast(`Added tag "${tagName}" to ${count} paper(s)`, 'success');
                 await Promise.all([this.loadShelvesAndTags(), this.loadAllPapers()]);
@@ -1256,7 +1274,7 @@ function library() {
         
         async bulkRemoveTag(tagName) {
             const ids = [...this.selectedPapers];
-            const count = await this._bulkUpdate({ arxiv_ids: ids, remove_tags: [tagName] });
+            const count = await this._bulkUpdate({ ids: ids, remove_tags: [tagName] });
             if (count > 0) {
                 showToast(`Removed tag "${tagName}" from ${count} paper(s)`, 'success');
                 await Promise.all([this.loadShelvesAndTags(), this.loadAllPapers()]);

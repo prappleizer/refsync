@@ -8,6 +8,13 @@ from typing import Optional
 from ..models import Paper
 
 
+def _paper_year(paper: Paper) -> Optional[int]:
+    """Best-effort publication year: from `published`, else None."""
+    if paper.published:
+        return paper.published.year
+    return None
+
+
 def generate_cite_key(paper: Paper, existing_keys: Optional[set[str]] = None) -> str:
     """
     Generate a cite key in format LastName:Year (e.g., McCallum:2025).
@@ -32,7 +39,7 @@ def generate_cite_key(paper: Paper, existing_keys: Optional[set[str]] = None) ->
             parts = first_author.strip().split()
             # Skip suffixes like Jr., III, etc.
             suffixes = {"jr", "jr.", "sr", "sr.", "ii", "iii", "iv", "phd", "md"}
-            last_name = parts[-1]
+            last_name = parts[-1] if parts else "Unknown"
             for i in range(len(parts) - 1, -1, -1):
                 if parts[i].lower().rstrip(".") not in suffixes:
                     last_name = parts[i]
@@ -43,11 +50,12 @@ def generate_cite_key(paper: Paper, existing_keys: Optional[set[str]] = None) ->
     # Clean the last name (remove special characters, keep accents)
     last_name = re.sub(r"[^\w\s-]", "", last_name).strip()
 
-    # Get year from published date
-    year = paper.published.year
+    # Get year from published date (may be missing for sparse ADS records)
+    year = _paper_year(paper)
+    year_str = str(year) if year is not None else "0000"
 
     # Base key
-    base_key = f"{last_name}:{year}"
+    base_key = f"{last_name}:{year_str}"
 
     # Check for collisions and add suffix if needed
     if base_key not in existing_keys:
@@ -59,8 +67,10 @@ def generate_cite_key(paper: Paper, existing_keys: Optional[set[str]] = None) ->
         if candidate not in existing_keys:
             return candidate
 
-    # Fallback: add arxiv ID
-    return f"{base_key}_{paper.arxiv_id.replace('.', '_')}"
+    # Fallback: append a stable disambiguator from whatever identifier we have.
+    tail = paper.arxiv_id or paper.bibcode or paper.id
+    tail = tail.replace(".", "_").replace("/", "_")
+    return f"{base_key}_{tail}"
 
 
 def format_authors_bibtex(authors: list[str]) -> str:
@@ -110,16 +120,22 @@ def generate_arxiv_bibtex(paper: Paper, cite_key: str) -> str:
     """
     Generate BibTeX entry from arXiv paper metadata.
 
+    Only valid for papers that actually have an arXiv id. Callers should not
+    invoke this for ADS-only papers (use the ADS-provided BibTeX instead).
+
     Args:
-        paper: Paper object with metadata
+        paper: Paper object with metadata (must have arxiv_id and published)
         cite_key: Citation key to use
 
     Returns:
         BibTeX string
     """
+    if not paper.arxiv_id:
+        raise ValueError("generate_arxiv_bibtex called on a paper without an arxiv_id")
+
     authors = format_authors_bibtex(paper.authors)
     title = escape_bibtex(paper.title)
-    year = paper.published.year
+    year = _paper_year(paper)
 
     # Get primary category for primaryClass
     primary_class = paper.categories[0] if paper.categories else "astro-ph"
@@ -139,13 +155,16 @@ def generate_arxiv_bibtex(paper: Paper, cite_key: str) -> str:
         "nov",
         "dec",
     ]
-    month = month_names[paper.published.month - 1]
+    month_line = ""
+    if paper.published:
+        month = month_names[paper.published.month - 1]
+        month_line = f"\n        month = {month},"
+
+    year_line = f"\n         year = {year}," if year is not None else ""
 
     bibtex = f"""@ARTICLE{{{cite_key},
        author = {{{authors}}},
-        title = "{{{title}}}",
-         year = {year},
-        month = {month},
+        title = "{{{title}}}",{year_line}{month_line}
        eprint = {{{paper.arxiv_id}}},
 archivePrefix = {{arXiv}},
  primaryClass = {{{primary_class}}},

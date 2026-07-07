@@ -23,17 +23,17 @@ class PaperRepository(ABC):
         pass
 
     @abstractmethod
-    async def get(self, arxiv_id: str) -> Optional[Paper]:
-        """Get a paper by arXiv ID"""
+    async def get(self, id: str) -> Optional[Paper]:
+        """Get a paper by internal id"""
         pass
 
     @abstractmethod
-    async def update(self, arxiv_id: str, data: PaperUpdate) -> Optional[Paper]:
+    async def update(self, id: str, data: PaperUpdate) -> Optional[Paper]:
         """Update paper metadata"""
         pass
 
     @abstractmethod
-    async def delete(self, arxiv_id: str) -> bool:
+    async def delete(self, id: str) -> bool:
         """Remove a paper from the library"""
         pass
 
@@ -48,12 +48,12 @@ class PaperRepository(ABC):
         pass
 
     @abstractmethod
-    async def exists(self, arxiv_id: str) -> bool:
+    async def exists(self, id: str) -> bool:
         """Check if a paper exists in the library"""
         pass
 
     @abstractmethod
-    async def set_cover(self, arxiv_id: str, cover_path: str) -> Optional[Paper]:
+    async def set_cover(self, id: str, cover_path: Optional[str]) -> Optional[Paper]:
         """Set cover image path for a paper"""
         pass
 
