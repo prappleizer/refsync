@@ -62,9 +62,9 @@ async def library(request: Request):
     return templates.TemplateResponse(request, "library.html")
 
 
-@app.get("/paper/{arxiv_id:path}", response_class=HTMLResponse)
-async def paper_detail(request: Request, arxiv_id: str):
-    return templates.TemplateResponse(request, "paper.html", context={"arxiv_id": arxiv_id})
+@app.get("/paper/{id}", response_class=HTMLResponse)
+async def paper_detail(request: Request, id: str):
+    return templates.TemplateResponse(request, "paper.html", context={"id": id})
 
 
 @app.get("/settings", response_class=HTMLResponse)
