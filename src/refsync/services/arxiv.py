@@ -7,6 +7,7 @@ import httpx
 
 from ..models import Paper
 from .bibtex import generate_arxiv_bibtex, generate_cite_key
+from .identifiers import make_paper_id
 from .latex import latex_to_text
 
 # Patterns to extract arXiv ID from various URL formats
@@ -127,6 +128,7 @@ async def fetch_arxiv_paper(url_or_id: str) -> Paper:
 
     # Create paper first (without bibtex - we'll add it after)
     paper = Paper(
+        id=make_paper_id(arxiv_id=base_id),
         arxiv_id=base_id,
         title=title,
         authors=authors,
