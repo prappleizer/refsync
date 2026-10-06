@@ -3,9 +3,40 @@ BibTeX generation and management service.
 """
 
 import re
+import unicodedata
 from typing import Optional
 
 from ..models import Paper
+
+
+_SUFFIXES = {"jr", "sr", "ii", "iii", "iv", "phd", "md"}
+
+# Letters that don't decompose into base letter + accent under NFKD
+_ASCII_EXTRA = str.maketrans(
+    {
+        "ø": "o", "Ø": "O", "ł": "l", "Ł": "L", "đ": "d", "Đ": "D",
+        "ð": "d", "Ð": "D", "þ": "th", "Þ": "Th", "ı": "i", "ħ": "h",
+        "ß": "ss", "æ": "ae", "Æ": "AE", "œ": "oe", "Œ": "OE",
+    }
+)
+
+
+def _ascii_fold(text: str) -> str:
+    """Strip accents so cite keys are plain ASCII (Kereš -> Keres, Ø -> O)."""
+    text = text.translate(_ASCII_EXTRA)
+    decomposed = unicodedata.normalize("NFKD", text)
+    return decomposed.encode("ascii", "ignore").decode("ascii")
+
+
+def make_cite_key_name(last_name: str) -> str:
+    """
+    Turn a surname into the name part of a cite key: ASCII only, spaces as
+    underscores, nothing but letters, digits, '_' and '-'.
+    "van Dokkum" -> "van_Dokkum", "Faucher-Giguère" -> "Faucher-Giguere".
+    """
+    name = _ascii_fold(last_name.strip())
+    name = re.sub(r"\s+", "_", name)
+    return re.sub(r"[^A-Za-z0-9_-]", "", name)
 
 
 def _paper_year(paper: Paper) -> Optional[int]:
@@ -15,9 +46,41 @@ def _paper_year(paper: Paper) -> Optional[int]:
     return None
 
 
+def _split_name(name: str) -> tuple[str, str]:
+    """
+    Split an author name into (last, first).
+
+    The last name keeps any lowercase particles, e.g. "van Dokkum",
+    "de la Cruz", "van der Wel". Accepts "First Last" or "Last, First".
+    """
+    name = name.strip()
+    if "," in name:
+        last, _, first = name.partition(",")
+        return last.strip(), first.strip()
+
+    parts = name.split()
+    if not parts:
+        return "Unknown", ""
+
+    # Drop trailing suffixes (Jr., III, ...)
+    end = len(parts)
+    while end > 1 and parts[end - 1].lower().rstrip(".") in _SUFFIXES:
+        end -= 1
+
+    # Surname is the last real word, plus any lowercase particles before it
+    # (the same rule BibTeX uses for its "von" part)
+    start = end - 1
+    while start > 0 and parts[start - 1][0].islower():
+        start -= 1
+
+    return " ".join(parts[start:end]), " ".join(parts[:start])
+
+
 def generate_cite_key(paper: Paper, existing_keys: Optional[set[str]] = None) -> str:
     """
     Generate a cite key in format LastName:Year (e.g., McCallum:2025).
+    Keys are ASCII-only: multi-word surnames are joined with underscores
+    (van_Dokkum:2025) and accents are dropped (Faucher-Giguere:2023).
     Handles duplicates with a, b, c suffixes.
 
     Args:
@@ -29,26 +92,15 @@ def generate_cite_key(paper: Paper, existing_keys: Optional[set[str]] = None) ->
     """
     existing_keys = existing_keys or set()
 
-    # Extract first author's last name
+    # Extract first author's last name (including particles like "van")
     if paper.authors:
-        first_author = paper.authors[0]
-        # Handle formats like "John Smith" or "Smith, John"
-        if "," in first_author:
-            last_name = first_author.split(",")[0].strip()
-        else:
-            parts = first_author.strip().split()
-            # Skip suffixes like Jr., III, etc.
-            suffixes = {"jr", "jr.", "sr", "sr.", "ii", "iii", "iv", "phd", "md"}
-            last_name = parts[-1] if parts else "Unknown"
-            for i in range(len(parts) - 1, -1, -1):
-                if parts[i].lower().rstrip(".") not in suffixes:
-                    last_name = parts[i]
-                    break
+        last_name, _ = _split_name(paper.authors[0])
     else:
         last_name = "Unknown"
 
-    # Clean the last name (remove special characters, keep accents)
-    last_name = re.sub(r"[^\w\s-]", "", last_name).strip()
+    # ASCII only, spaces -> underscores (van Dokkum -> van_Dokkum,
+    # Faucher-Giguère -> Faucher-Giguere), so classic BibTeX accepts the key
+    last_name = make_cite_key_name(last_name) or "Unknown"
 
     # Get year from published date (may be missing for sparse ADS records)
     year = _paper_year(paper)
@@ -77,22 +129,12 @@ def format_authors_bibtex(authors: list[str]) -> str:
     """
     Format author list for BibTeX.
     Converts "First Last" to "{Last}, First" format and joins with " and ".
+    Surname particles are kept with the last name ("{van Dokkum}, Pieter").
     """
     formatted = []
     for author in authors:
-        author = author.strip()
-        if "," in author:
-            # Already in "Last, First" format
-            formatted.append(f"{{{author}}}")
-        else:
-            parts = author.split()
-            if len(parts) >= 2:
-                # Assume last word is last name (simplified)
-                last = parts[-1]
-                first = " ".join(parts[:-1])
-                formatted.append(f"{{{last}}}, {first}")
-            else:
-                formatted.append(f"{{{author}}}")
+        last, first = _split_name(author)
+        formatted.append(f"{{{last}}}, {first}" if first else f"{{{last}}}")
 
     return " and ".join(formatted)
 
