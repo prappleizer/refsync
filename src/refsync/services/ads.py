@@ -42,6 +42,7 @@ class ADSClient:
 
         Returns dict mapping arxiv_id -> ADS record (or None if not found)
         """
+        arxiv_ids = [a for a in arxiv_ids if a]
         if not arxiv_ids:
             return {}
 
@@ -95,6 +96,43 @@ class ADSClient:
                         break
 
         return results
+
+    async def search_by_bibcodes(self, bibcodes: list[str]) -> dict:
+        """
+        Search ADS for papers by bibcode (used for ADS-only papers).
+
+        Returns dict mapping bibcode -> ADS record
+        """
+        bibcodes = [b for b in bibcodes if b]
+        if not bibcodes:
+            return {}
+
+        quoted = " OR ".join(f'"{b}"' for b in bibcodes)
+        params = {
+            "q": f"bibcode:({quoted})",
+            "fl": "bibcode,doi,pub,volume,page,year,doctype,identifier,title,author",
+            "rows": min(len(bibcodes), 2000),
+        }
+
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.get(
+                f"{ADS_API_BASE}/search/query", params=params, headers=self.headers
+            )
+
+            if response.status_code == 401:
+                raise ADSError("Invalid ADS API key")
+            elif response.status_code == 429:
+                raise ADSError("ADS rate limit exceeded. Please try again later.")
+            elif response.status_code != 200:
+                raise ADSError(f"ADS API error: {response.status_code}")
+
+            data = response.json()
+
+        return {
+            doc["bibcode"]: doc
+            for doc in data.get("response", {}).get("docs", [])
+            if doc.get("bibcode")
+        }
 
     async def get_bibtex(self, bibcodes: list[str]) -> dict[str, str]:
         """
@@ -207,7 +245,7 @@ async def sync_papers_with_ads(papers: list, update_callback) -> dict:
 
     Args:
         papers: List of Paper objects to sync
-        update_callback: Async function(arxiv_id, updates_dict) to save updates
+        update_callback: Async function(paper_id, updates_dict) to save updates (internal id)
 
     Returns:
         Dict with sync statistics
@@ -221,31 +259,42 @@ async def sync_papers_with_ads(papers: list, update_callback) -> dict:
 
     client = ADSClient(api_key)
 
-    # Get arXiv IDs
-    arxiv_ids = [p.arxiv_id for p in papers]
+    # Papers can be arXiv-based (have arxiv_id) or ADS-only (bibcode, no arxiv_id).
+    arxiv_ids = [p.arxiv_id for p in papers if p.arxiv_id]
+    ads_only_bibcodes = [p.bibcode for p in papers if not p.arxiv_id and p.bibcode]
 
     stats = {"synced": 0, "published": 0, "unchanged": 0, "not_found": 0, "errors": 0}
 
     try:
-        # Step 1: Search for all papers in ADS
-        ads_records = await client.search_by_arxiv_ids(arxiv_ids)
+        # Step 1: Look up all papers in ADS
+        records_by_arxiv = await client.search_by_arxiv_ids(arxiv_ids)
+        records_by_bibcode = await client.search_by_bibcodes(ads_only_bibcodes)
+
+        def record_for(paper):
+            if paper.arxiv_id:
+                return records_by_arxiv.get(paper.arxiv_id)
+            if paper.bibcode:
+                return records_by_bibcode.get(paper.bibcode)
+            return None
 
         # Step 2: Get BibTeX for papers that were found
-        bibcodes = [rec["bibcode"] for rec in ads_records.values() if rec]
+        all_records = list(records_by_arxiv.values()) + list(records_by_bibcode.values())
+        bibcodes = list({rec["bibcode"] for rec in all_records if rec and rec.get("bibcode")})
         bibtex_map = {}
         if bibcodes:
             bibtex_map = await client.get_bibtex(bibcodes)
 
-        # Step 3: Update each paper
+        # Step 3: Update each paper (keyed on the internal id, not arxiv_id)
         for paper in papers:
+            label = paper.arxiv_id or paper.bibcode or paper.id
             try:
-                ads_record = ads_records.get(paper.arxiv_id)
+                ads_record = record_for(paper)
 
                 if not ads_record:
                     stats["not_found"] += 1
                     # Still mark as synced even if not in ADS
                     await update_callback(
-                        paper.arxiv_id,
+                        paper.id,
                         {"last_citation_sync": datetime.utcnow().isoformat()},
                     )
                     continue
@@ -255,7 +304,7 @@ async def sync_papers_with_ads(papers: list, update_callback) -> dict:
                 bibtex = bibtex_map.get(bibcode)
 
                 updates = {
-                    "ads_bibcode": bibcode,
+                    "bibcode": bibcode,
                     "is_published": is_pub,
                     "last_citation_sync": datetime.utcnow().isoformat(),
                 }
@@ -283,21 +332,19 @@ async def sync_papers_with_ads(papers: list, update_callback) -> dict:
                 # Update BibTeX if we got one from ADS
                 if bibtex:
                     # Replace the cite key with our format (LastName:Year)
-                    from .bibtex import update_cite_key_in_bibtex
-
                     if paper.cite_key:
                         bibtex = update_cite_key_in_bibtex(bibtex, paper.cite_key)
                     updates["bibtex"] = bibtex
                     updates["bibtex_source"] = "ads"
 
-                await update_callback(paper.arxiv_id, updates)
+                await update_callback(paper.id, updates)
 
                 stats["synced"] += 1
                 if is_pub:
                     stats["published"] += 1
 
             except Exception as e:
-                print(f"Error syncing {paper.arxiv_id}: {e}")
+                print(f"Error syncing {label}: {e}")
                 stats["errors"] += 1
 
     except ADSError:
