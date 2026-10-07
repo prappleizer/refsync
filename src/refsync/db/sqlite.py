@@ -35,6 +35,10 @@ class SQLiteDatabase:
     async def connect(self):
         self._connection = await aiosqlite.connect(self.db_path)
         self._connection.row_factory = aiosqlite.Row
+        # WAL lets refsync-explore read (and promote into) the library while the
+        # refsync server has it open; busy_timeout waits out brief write locks.
+        await self._connection.execute("PRAGMA journal_mode=WAL")
+        await self._connection.execute("PRAGMA busy_timeout=5000")
         await self._create_tables()
 
     async def disconnect(self):
@@ -357,6 +361,24 @@ class SQLitePaperRepository(PaperRepository):
         )
         await self.db.conn.commit()
         return await self.get(id)
+
+    async def find_existing(
+        self, arxiv_id: Optional[str] = None, bibcode: Optional[str] = None
+    ) -> Optional[str]:
+        conditions, params = [], []
+        if arxiv_id:
+            conditions.append("arxiv_id = ?")
+            params.append(arxiv_id)
+        if bibcode:
+            conditions.append("bibcode = ?")
+            params.append(bibcode)
+        if not conditions:
+            return None
+        async with self.db.conn.execute(
+            f"SELECT id FROM papers WHERE {' OR '.join(conditions)} LIMIT 1", params
+        ) as cursor:
+            row = await cursor.fetchone()
+            return row[0] if row else None
 
     async def cite_keys(self) -> set[str]:
         async with self.db.conn.execute(

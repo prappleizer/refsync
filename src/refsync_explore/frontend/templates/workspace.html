@@ -1,0 +1,425 @@
+{% extends "base.html" %}
+{% block title %}{{ project.name }} · refsync explore{% endblock %}
+{% block head %}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/web/pdf_viewer.css">
+{% endblock %}
+
+{% block body %}
+<div class="ws-root" x-data="workspace({{ project | tojson | forceescape }}, {{ refsync_port }})"
+     @keydown.window="onKey($event)">
+
+  <!-- ============================ top bar ============================ -->
+  <header class="topbar">
+    <a class="brand" href="/" title="All projects"><span class="brand-mark">r</span></a>
+    <div class="project-title" x-text="project.name" title="Click to rename" @click="renameProject()"></div>
+
+    <form class="searchbar" @submit.prevent="runSearch()" @click.outside="historyOpen = false">
+      <input class="input" x-ref="q" x-model="query" spellcheck="false"
+             placeholder='ADS query: abs:"circumgalactic" year:2018-2026 property:refereed   ( / to focus )'>
+      <select class="select" x-model="sort" title="Sort">
+        <option value="relevance">Relevance</option>
+        <option value="date">Newest</option>
+        <option value="citations">Most cited</option>
+        <option value="oldest">Oldest</option>
+      </select>
+      <button class="btn primary" :disabled="searching || !query.trim()">
+        <span x-text="searching ? 'Searching…' : 'Search'"></span>
+      </button>
+      <button type="button" class="btn" @click="toggleHistory()" title="Search history">History ▾</button>
+      <div class="popover" style="right:0" x-show="historyOpen" x-cloak>
+        <template x-for="h in history" :key="h.id">
+          <button type="button" class="item" @click="rerun(h)">
+            <div class="q" x-text="h.label || h.query"></div>
+            <div class="meta">
+              <span x-text="(h.num_found ?? '?') + ' results'"></span> ·
+              <span x-text="h.n_added + ' added'"></span> ·
+              <span x-text="sortName(h.sort)"></span> ·
+              <span x-text="timeAgo(h.last_run_at)"></span>
+            </div>
+          </button>
+        </template>
+        <div class="item muted" x-show="!history.length">No searches in this project yet.</div>
+      </div>
+    </form>
+
+    <div style="position:relative" @click.outside="addRefOpen = false">
+      <button class="btn" @click="toggleAddRef()" title="Add a paper from an arXiv/ADS link, id, bibcode or DOI">+ Add by link</button>
+      <form class="popover addref-pop" x-show="addRefOpen" x-cloak
+            @submit.prevent="addByRef()">
+        <input class="input" x-ref="addref" x-model="addRef" style="flex:1"
+               placeholder="arXiv/ADS link, arXiv id, bibcode or DOI">
+        <button class="btn primary">Stage</button>
+      </form>
+    </div>
+
+    <span class="rate" x-show="rate && rate.remaining != null" x-cloak
+          :title="'ADS daily query budget remaining'"
+          x-text="rate ? (rate.remaining + '/' + rate.limit) : ''"></span>
+    <a class="btn ghost" :href="refsyncLink('/library')" target="_blank" title="Open refsync">refsync ↗</a>
+    <button class="btn ghost icon" @click="toggleTheme()" title="Toggle dark mode"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 0 0 18z" fill="currentColor"/></svg></button>
+    <button class="btn ghost icon" @click="helpOpen = true" title="Keyboard shortcuts (?)">?</button>
+  </header>
+
+  <div class="banner" x-show="status && !status.ads_key" x-cloak>
+    <span>No ADS API key: searching needs one (it's shared with refsync).</span>
+    <input class="input" type="password" x-model="adsKey" placeholder="Paste ADS API token" style="width:260px">
+    <button class="btn sm primary" @click="saveKey()">Save key</button>
+    <a class="muted" href="https://ui.adsabs.harvard.edu/user/settings/token" target="_blank">Get a token ↗</a>
+  </div>
+
+  <!-- ============================ board + pane ============================ -->
+  <main class="ws" :class="{ 'rej-open': showRejected }">
+
+    <template x-for="col in ['staging', 'probables']" :key="col">
+      <section class="col" :class="col">
+        <div class="col-head">
+          <span class="name" x-text="col === 'staging' ? 'Staging' : 'Probables'"></span>
+          <span class="count" x-text="countLabel(col)"></span>
+          <select class="select" x-model="sortMode[col]" title="Sort this column" @change="applySortable()">
+            <option value="manual">Manual</option>
+            <option value="year">Newest</option>
+            <option value="cites">Most cited</option>
+            <option value="author">Author</option>
+          </select>
+        </div>
+        <div class="col-tools" x-show="col === 'staging'">
+          <input class="input" style="flex:1;font-size:12px;padding:3px 8px" x-model="filter"
+                 placeholder="Filter cards…  (title, author, note, #tag)">
+        </div>
+        <div class="col-tools" x-show="col === 'probables'">
+          <button class="btn sm" style="flex:1;justify-content:center" @click="openPromote()"
+                  :disabled="!order.probables.length" title="Add probables to your refsync library">
+            Send to refsync…
+          </button>
+        </div>
+        <div class="col-list" :data-col="col" x-init="registerList($el, col)">
+          <template x-for="c in columnCards(col)" :key="c.id">
+            <article class="card" :data-id="c.id"
+                     :class="{ selected: selected === c.id, unseen: c.read_state === 'unseen', read: c.read_state === 'read' }"
+                     @click="selectCard(c.id)">
+              <div class="meta">
+                <span class="who" x-text="c.author_label + ' ' + (c.year || '')"></span>
+                <span x-text="c.bibstem || ''"></span>
+                <span class="r">
+                  <span x-show="c.citation_count != null" x-text="c.citation_count + ' cit'"></span>
+                  <span class="pdfdot" :class="c.pdf_status" :title="'PDF: ' + (c.pdf_status === 'ok' ? 'cached' : c.pdf_status === 'failed' ? 'not available' : 'not fetched yet')"></span>
+                </span>
+              </div>
+              <div class="title" x-text="c.title"></div>
+              <template x-if="editingOneLiner === c.id">
+                <input class="input oneliner-edit" x-init="$nextTick(() => $el.focus())"
+                       :value="c.one_liner || ''" placeholder="One-line summary…"
+                       @click.stop @keydown.enter.prevent="saveOneLiner(c, $el.value)"
+                       @keydown.escape.prevent.stop="editingOneLiner = null" @blur="saveOneLiner(c, $el.value)">
+              </template>
+              <div class="oneliner" x-show="c.one_liner && editingOneLiner !== c.id" x-text="c.one_liner"></div>
+              <div class="tags" x-show="c.tags.length || c.refsync_id">
+                <template x-for="t in c.tags" :key="t">
+                  <span class="chip" :style="'--chip:' + tagColor(t)" x-text="t"></span>
+                </template>
+                <span class="badge refsync" x-show="c.refsync_id" title="In your refsync library">✓ refsync</span>
+              </div>
+            </article>
+          </template>
+          <div class="col-empty" x-show="!order[col].length"
+               x-text="col === 'staging' ? 'Search above, then check papers and Stage them (or drag results here).' : 'Drag the keepers here, or press 2 on a card.'"></div>
+        </div>
+      </section>
+    </template>
+
+    <!-- rejected: collapsed strip, expands on click -->
+    <section class="col rejected">
+      <template x-if="!showRejected">
+        <div class="strip" @click="showRejected = true" title="Show rejected"
+             x-text="'Rejected · ' + order.rejected.length"></div>
+      </template>
+      <div class="col-head" x-show="showRejected">
+        <span class="name">Rejected</span>
+        <span class="count" x-text="order.rejected.length"></span>
+        <button class="btn ghost sm" style="margin-left:auto" @click="showRejected = false" title="Collapse">⟨</button>
+      </div>
+      <div class="col-list" data-col="rejected" x-init="registerList($el, 'rejected')">
+        <template x-for="c in columnCards('rejected')" :key="c.id">
+          <article class="card" :data-id="c.id" :class="{ selected: selected === c.id }" @click="selectCard(c.id)">
+            <div class="meta"><span class="who" x-text="c.author_label + ' ' + (c.year || '')"></span>
+              <span x-text="c.bibstem || ''"></span></div>
+            <div class="title" x-text="c.title"></div>
+            <div class="whynot" x-show="c.why_not" x-text="'Why not: ' + c.why_not"></div>
+          </article>
+        </template>
+      </div>
+    </section>
+
+    <!-- ============================ main pane ============================ -->
+    <section class="pane">
+
+      <!-- search results -->
+      <template x-if="mode === 'search' && results">
+        <div class="results">
+          <div class="results-head">
+            <div style="flex:1;min-width:0">
+              <div class="q" x-text="results.label || results.query" :title="results.query"></div>
+              <div class="n">
+                <span x-text="results.num_found.toLocaleString() + ' results'"></span>
+                <span x-show="results.hits.length < results.num_found"
+                      x-text="' · showing ' + results.hits.length"></span>
+                <span x-text="' · ' + newCount() + ' not yet triaged'"></span>
+              </div>
+            </div>
+            <select class="select" :value="results.sort" @change="resort($event.target.value)">
+              <option value="relevance">Relevance</option>
+              <option value="date">Newest</option>
+              <option value="citations">Most cited</option>
+              <option value="oldest">Oldest</option>
+            </select>
+            <button class="btn sm" @click="checkAllNew()">Check new</button>
+            <button class="btn sm" @click="checked = {}" :disabled="!checkedIds().length">None</button>
+            <button class="btn sm primary" @click="addChecked('staging')" :disabled="!checkedIds().length"
+                    x-text="'Stage ' + checkedIds().length"></button>
+            <button class="btn sm" @click="addChecked('probables')" :disabled="!checkedIds().length">→ Probables</button>
+            <button class="btn sm ghost" @click="closeSearch()" title="Back to reader (Esc)">✕</button>
+          </div>
+          <div class="results-list" x-ref="resultsList" x-init="registerResults($el)">
+            <template x-for="(h, i) in results.hits" :key="h.id">
+              <div class="hit" :data-id="h.id" :class="{ seen: !!h.status, cursor: cursor === i }"
+                   @mouseenter="cursor = i">
+                <input type="checkbox" :checked="!!checked[h.id]" @change="toggleCheck(h.id)">
+                <div style="min-width:0">
+                  <div class="meta">
+                    <span class="who" x-text="h.author_label + ' ' + (h.year || '')"></span>
+                    <span x-text="h.bibstem || ''"></span>
+                    <span x-show="h.citation_count != null" x-text="h.citation_count + ' citations'"></span>
+                    <span class="badge" :class="h.status ? 'col-' + h.status.col : ''" x-show="h.status" x-text="h.status ? h.status.col : ''"></span>
+                    <span class="badge refsync" x-show="h.refsync_id">in refsync</span>
+                  </div>
+                  <div class="title" x-text="h.title" @click="openHit(h)" title="Open in reader"></div>
+                  <div class="oneliner" x-show="h.status && h.status.one_liner" x-text="h.status && h.status.one_liner"></div>
+                  <div class="abs" x-show="expanded[h.id]" x-text="h.abstract || 'No abstract.'"></div>
+                  <a href="#" class="faint" style="font-size:11.5px" @click.prevent="expanded[h.id] = !expanded[h.id]"
+                     x-text="expanded[h.id] ? 'hide abstract' : 'abstract'"></a>
+                </div>
+                <div class="acts">
+                  <button class="btn sm" @click="addHits([h.id], 'staging')" title="Stage (1)">Stage</button>
+                  <button class="btn sm" @click="addHits([h.id], 'probables')" title="Probable (2)">★</button>
+                  <button class="btn sm" @click="addHits([h.id], 'rejected')" title="Reject (3)">✕</button>
+                </div>
+              </div>
+            </template>
+            <div class="results-foot">
+              <button class="btn" x-show="results.hits.length < results.num_found" @click="loadMore()"
+                      :disabled="searching" x-text="searching ? 'Loading…' : 'Load 50 more'"></button>
+              <span class="faint" x-show="!results.hits.length">No results.</span>
+            </div>
+          </div>
+        </div>
+      </template>
+
+      <!-- paper: header + PDF / details -->
+      <div class="paper-wrap" x-show="mode === 'paper' && paper">
+        <template x-if="paper">
+          <div class="paper-head">
+            <div class="crumbs" x-show="results">
+              <button class="btn sm ghost" @click="backToResults()">← Results</button>
+            </div>
+            <h1 x-text="paper.title"></h1>
+            <div class="authors">
+              <span x-text="paper.authors.slice(0, 8).join(', ')"></span>
+              <span x-show="paper.author_count > 8" x-text="' … (' + paper.author_count + ' authors)'"></span>
+            </div>
+            <div class="facts">
+              <span x-text="[paper.year, paper.pub, paper.volume].filter(Boolean).join(' · ')"></span>
+              <span x-show="paper.citation_count != null" x-text="paper.citation_count + ' citations'"></span>
+              <a :href="adsUrl(paper)" target="_blank" x-show="paper.bibcode">ADS ↗</a>
+              <a :href="'https://arxiv.org/abs/' + paper.arxiv_id" target="_blank" x-show="paper.arxiv_id">arXiv ↗</a>
+              <a :href="'https://doi.org/' + paper.doi" target="_blank" x-show="paper.doi">DOI ↗</a>
+              <a :href="refsyncLink('/paper/' + paper.refsync_id)" target="_blank" x-show="paper.refsync_id">in refsync ↗</a>
+            </div>
+            <div class="paper-actions">
+              <template x-if="card">
+                <div class="seg">
+                  <button class="c-staging" :class="{ on: card.col === 'staging' }" @click="moveCard(card.id, 'staging')" title="1">Staging</button>
+                  <button class="c-probables" :class="{ on: card.col === 'probables' }" @click="moveCard(card.id, 'probables')" title="2">Probable</button>
+                  <button class="c-rejected" :class="{ on: card.col === 'rejected' }" @click="moveCard(card.id, 'rejected')" title="3">Rejected</button>
+                </div>
+              </template>
+              <template x-if="!card">
+                <div class="seg">
+                  <button @click="addHits([paper.id], 'staging')">+ Stage</button>
+                  <button @click="addHits([paper.id], 'probables')">+ Probable</button>
+                  <button @click="addHits([paper.id], 'rejected')">Reject</button>
+                </div>
+              </template>
+              <span class="faint">Hop:</span>
+              <button class="btn sm" @click="hop('references')" :disabled="!paper.bibcode">References</button>
+              <button class="btn sm" @click="hop('citations')" :disabled="!paper.bibcode">Citations</button>
+              <button class="btn sm" @click="hop('similar')" :disabled="!paper.bibcode">Similar</button>
+            </div>
+          </div>
+        </template>
+
+        <div class="tabs">
+          <button :class="{ on: tab === 'pdf' }" @click="tab = 'pdf'">PDF</button>
+          <button :class="{ on: tab === 'details' }" @click="tab = 'details'">Notes &amp; abstract</button>
+          <div class="r" x-show="tab === 'pdf' && pdfState === 'ready'">
+            <span x-text="pageInfo"></span>
+            <button class="btn sm ghost" @click="zoom(-1)" title="Zoom out">−</button>
+            <button class="btn sm ghost" @click="fitWidth()" title="Fit width">Fit</button>
+            <button class="btn sm ghost" @click="zoom(1)" title="Zoom in">+</button>
+            <a class="btn sm ghost" :href="paper ? '/api/papers/' + paper.id + '/pdf' : '#'" target="_blank" title="Open PDF in a new tab">↗</a>
+          </div>
+        </div>
+
+        <div class="reader" x-show="tab === 'pdf'">
+          <div class="viewerContainer" x-ref="viewer"></div>
+          <div class="reader-msg" x-show="pdfState === 'loading'"><div class="box"><div class="spinner"></div>Loading PDF…</div></div>
+          <div class="reader-msg" x-show="pdfState === 'error'" x-cloak>
+            <div class="box">
+              <div class="err" x-text="pdfError"></div>
+              <div class="row" style="justify-content:center;display:flex;gap:6px;flex-wrap:wrap">
+                <a class="btn sm" :href="paper && adsUrl(paper)" target="_blank" x-show="paper && paper.bibcode">ADS page ↗</a>
+                <a class="btn sm" :href="paper && ('https://doi.org/' + paper.doi)" target="_blank" x-show="paper && paper.doi">Publisher ↗</a>
+                <button class="btn sm" @click="retryPdf()">Retry</button>
+                <label class="btn sm primary">Upload PDF…
+                  <input type="file" accept="application/pdf" style="display:none" @change="uploadPdf($event)">
+                </label>
+              </div>
+              <p class="faint" style="font-size:12px">Downloaded the PDF yourself? Upload it and it's cached here (and handed to refsync if you send the paper there).</p>
+            </div>
+          </div>
+        </div>
+
+        <template x-if="tab === 'details' && paper">
+          <div class="details">
+            <template x-if="card">
+              <div>
+                <section>
+                  <h3>One-liner</h3>
+                  <input class="input" style="width:100%" :value="card.one_liner || ''" placeholder="What this paper is, for this project (e)"
+                         x-ref="oneLinerField"
+                         @change="saveField(card, 'one_liner', $event.target.value)">
+                </section>
+                <section>
+                  <h3>Tags</h3>
+                  <div class="tag-editor" @click="$refs.tagInput.focus()">
+                    <template x-for="t in card.tags" :key="t">
+                      <span class="chip" :style="'--chip:' + tagColor(t)"><span x-text="t"></span>
+                        <button @click.stop="removeTag(card, t)" title="Remove">×</button></span>
+                    </template>
+                    <input x-ref="tagInput" x-model="tagDraft" placeholder="Add tag… (t)"
+                           @keydown.enter.prevent="addTag(card, tagDraft)"
+                           @keydown.tab="if (tagSuggestions().length) { $event.preventDefault(); addTag(card, tagSuggestions()[0].name) }"
+                           @keydown.backspace="if (!tagDraft && card.tags.length) removeTag(card, card.tags[card.tags.length - 1])"
+                           @keydown.escape.stop="tagDraft = ''; $el.blur()">
+                    <div class="suggest" x-show="tagDraft && tagSuggestions().length">
+                      <template x-for="s in tagSuggestions()" :key="s.name">
+                        <button @mousedown.prevent="addTag(card, s.name)" x-text="s.name"></button>
+                      </template>
+                    </div>
+                  </div>
+                </section>
+                <section>
+                  <h3>Notes</h3>
+                  <textarea class="textarea" :value="card.note || ''" placeholder="Notes for this project: key results, figure numbers, caveats…"
+                            @input="saveFieldSoon(card, 'note', $event.target.value)"></textarea>
+                </section>
+                <section x-show="card.col === 'rejected'">
+                  <h3>Why not</h3>
+                  <input class="input" style="width:100%" :value="card.why_not || ''" placeholder="So future-you doesn't re-read it"
+                         @change="saveField(card, 'why_not', $event.target.value)">
+                </section>
+                <section>
+                  <h3>Status</h3>
+                  <div class="row">
+                    <div class="seg">
+                      <template x-for="s in ['unseen', 'skimmed', 'read']" :key="s">
+                        <button :class="{ on: card.read_state === s }" @click="saveField(card, 'read_state', s)" x-text="s"></button>
+                      </template>
+                    </div>
+                    <span class="faint" style="font-size:12px" x-show="card.found_via" x-text="'Found via: ' + card.found_via"></span>
+                    <button class="btn sm ghost" style="margin-left:auto" @click="removeFromProject(card)">Remove from project</button>
+                  </div>
+                </section>
+              </div>
+            </template>
+            <section>
+              <h3>Abstract</h3>
+              <div class="abstract" x-text="paper.abstract || 'No abstract available.'"></div>
+            </section>
+            <section class="faint" style="font-size:12px">
+              <span x-text="paper.bibcode"></span>
+              <span x-show="paper.arxiv_class && paper.arxiv_class.length" x-text="' · ' + paper.arxiv_class.join(', ')"></span>
+            </section>
+          </div>
+        </template>
+      </div>
+
+      <!-- nothing open -->
+      <div class="pane-empty" x-show="mode === 'empty' || (mode === 'paper' && !paper)">
+        <h2 x-text="project.name"></h2>
+        <p x-show="project.description" x-text="project.description"></p>
+        <ul>
+          <li>Search ADS in the bar above. Full ADS syntax works: <span class="mono">abs:</span>, <span class="mono">author:"^Last"</span>, <span class="mono">year:</span>, <span class="mono">property:refereed</span>, <span class="mono">citations()</span>…</li>
+          <li>Check results and <b>Stage</b> them, or drag a result straight into a column.</li>
+          <li>Click a card to read it here. PDFs are cached, and each paper remembers its page.</li>
+          <li>Press <span class="kbd">?</span> for keyboard shortcuts.</li>
+        </ul>
+      </div>
+    </section>
+  </main>
+
+  <!-- ============================ send to refsync ============================ -->
+  <div class="modal-bg" x-show="promoteOpen" x-cloak @click.self="promoteOpen = false">
+    <div class="modal">
+      <header>Send to refsync<span class="spacer"></span>
+        <button class="btn ghost sm" @click="promoteOpen = false">✕</button></header>
+      <div class="body">
+        <p class="muted" style="margin-top:0">Adds the checked papers to your refsync library with ADS BibTeX and
+          cite keys, plus any PDF already cached here. Papers already in refsync just get the shelf and tags.</p>
+        <template x-for="c in columnCards('probables')" :key="c.id">
+          <label class="pick">
+            <input type="checkbox" :checked="!!promotePick[c.id]" @change="promotePick[c.id] = !promotePick[c.id]">
+            <span><b x-text="c.author_label + ' ' + (c.year || '')"></b> <span x-text="c.title"></span>
+              <span class="badge refsync" x-show="c.refsync_id">already in refsync</span></span>
+          </label>
+        </template>
+        <div style="display:grid;gap:8px;margin-top:12px">
+          <label>refsync shelf
+            <input class="input" style="width:100%" x-model="promoteShelf" placeholder="(none)"></label>
+          <label><input type="checkbox" x-model="promoteTags"> Copy this project's tags</label>
+          <label><input type="checkbox" x-model="promoteNotes"> Copy one-liner and notes into refsync notes</label>
+        </div>
+      </div>
+      <footer>
+        <span class="muted" style="margin-right:auto" x-text="Object.values(promotePick).filter(Boolean).length + ' selected'"></span>
+        <button class="btn" @click="promoteOpen = false">Cancel</button>
+        <button class="btn primary" @click="doPromote()" :disabled="promoting || !Object.values(promotePick).some(Boolean)"
+                x-text="promoting ? 'Sending…' : 'Send to refsync'"></button>
+      </footer>
+    </div>
+  </div>
+
+  <!-- ============================ shortcuts ============================ -->
+  <div class="modal-bg" x-show="helpOpen" x-cloak @click.self="helpOpen = false">
+    <div class="modal" style="width:min(520px,100%)">
+      <header>Keyboard shortcuts<span class="spacer"></span><button class="btn ghost sm" @click="helpOpen = false">✕</button></header>
+      <div class="body keys">
+        <span class="kbd">/</span><span>Focus the ADS search box</span>
+        <span class="kbd">j / k</span><span>Next / previous card (or result, while results are open)</span>
+        <span class="kbd">1 2 3</span><span>Move to Staging / Probables / Rejected (results: add the checked or current one)</span>
+        <span class="kbd">x</span><span>Check / uncheck the current result</span>
+        <span class="kbd">Enter</span><span>Open the current result in the reader</span>
+        <span class="kbd">e</span><span>Edit the one-liner of the selected card</span>
+        <span class="kbd">t</span><span>Add a tag to the selected card</span>
+        <span class="kbd">r</span><span>Toggle read / skimmed</span>
+        <span class="kbd">d</span><span>Switch between PDF and Notes &amp; abstract</span>
+        <span class="kbd">s</span><span>Show search results again</span>
+        <span class="kbd">Esc</span><span>Close results / cancel editing</span>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script type="module" src="/static/js/workspace.js?v={{ version }}"></script>
+{% endblock %}

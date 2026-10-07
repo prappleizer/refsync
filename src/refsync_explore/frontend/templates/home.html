@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}Projects · refsync explore{% endblock %}
+
+{% block body %}
+<div x-data="homePage({{ refsync_port }})">
+  <header class="topbar">
+    <a class="brand" href="/"><span class="brand-mark">r</span>refsync <small>explore</small></a>
+    <div class="spacer"></div>
+    <a class="btn ghost" :href="refsyncLink()" target="_blank" title="Open your refsync library">refsync library ↗</a>
+    <button class="btn ghost icon" @click="toggleTheme()" title="Toggle dark mode"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 0 0 18z" fill="currentColor"/></svg></button>
+  </header>
+
+  <div class="banner" x-show="status && !status.ads_key" x-cloak>
+    <span>No ADS API key yet. explore uses the same key as refsync.</span>
+    <input class="input" type="password" x-model="adsKey" placeholder="Paste ADS API token" style="width:280px">
+    <button class="btn sm primary" @click="saveKey()">Save key</button>
+    <a class="muted" href="https://ui.adsabs.harvard.edu/user/settings/token" target="_blank">Get a token ↗</a>
+  </div>
+
+  <main class="home">
+    <h1>Projects</h1>
+    <p class="lead">One project per lit review: its searches, staged papers, notes and PDFs stay together.</p>
+
+    <form class="new-project" @submit.prevent="create()">
+      <input class="input" x-model="newName" placeholder="New project, e.g. “CGM of dwarf galaxies”" x-ref="name">
+      <input class="input" x-model="newDesc" placeholder="Short description (optional)">
+      <button class="btn primary" :disabled="!newName.trim()">Create project</button>
+    </form>
+
+    <div class="projects">
+      <template x-for="p in projects" :key="p.id">
+        <a class="pcard" :href="'/p/' + p.id">
+          <h2 x-text="p.name"></h2>
+          <div class="desc" x-text="p.description || ''" x-show="p.description"></div>
+          <div class="counts">
+            <span><b x-text="p.counts.staging"></b> staged</span>
+            <span class="p"><b x-text="p.counts.probables"></b> probables</span>
+            <span><b x-text="p.counts.rejected"></b> rejected</span>
+            <span style="margin-left:auto" x-text="timeAgo(p.last_activity)"></span>
+          </div>
+        </a>
+      </template>
+    </div>
+    <p class="muted" x-show="loaded && !projects.length" x-cloak>No projects yet. Create one above to start a lit review.</p>
+
+    <p class="faint" style="margin-top:28px;font-size:12px" x-show="archivedCount" x-cloak>
+      <a href="#" @click.prevent="showArchived = !showArchived; load()" x-text="showArchived ? 'Hide archived' : 'Show archived projects'"></a>
+    </p>
+  </main>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script type="module" src="/static/js/home.js?v={{ version }}"></script>
+{% endblock %}

@@ -9,7 +9,7 @@ from ..db import PaperRepository
 from ..models import Paper, PaperCreate, PaperUpdate, SearchQuery, SearchResult
 from ..services import ArxivAPIError  # kept for compatibility
 from ..services.ads import ADSError
-from ..services.bibtex import generate_cite_key, update_cite_key_in_bibtex
+from ..services.library import PaperExistsError, add_paper_to_library
 from ..services.resolve import ResolveError, resolve_paper
 
 router = APIRouter(prefix="/api/papers", tags=["papers"])
@@ -45,22 +45,15 @@ async def add_paper(data: PaperCreate, repo: PaperRepository = Depends(get_paper
         # e.g. ADS key not configured, or bibcode not found
         raise HTTPException(status_code=400, detail=str(e))
 
-    # Check if already exists (deterministic id dedups arxiv/ADS routes to same paper)
-    if await repo.exists(paper.id):
+    # Deterministic ids dedupe arXiv/ADS routes to the same paper; the shared
+    # helper also makes sure the cite key doesn't collide with an existing one.
+    try:
+        return await add_paper_to_library(repo, paper)
+    except PaperExistsError as e:
         raise HTTPException(
             status_code=409,
-            detail={"message": "Paper already in library", "id": paper.id},
+            detail={"message": "Paper already in library", "id": e.paper_id},
         )
-
-    # The fetchers generate a cite key without seeing the library; make sure a
-    # second "Smith:2024" becomes "Smith:2024a" instead of colliding.
-    cite_key = generate_cite_key(paper, await repo.cite_keys())
-    if cite_key != paper.cite_key:
-        paper.cite_key = cite_key
-        if paper.bibtex:
-            paper.bibtex = update_cite_key_in_bibtex(paper.bibtex, cite_key)
-
-    return await repo.create(paper)
 
 
 @router.get("", response_model=list[Paper])

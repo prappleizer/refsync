@@ -61,12 +61,17 @@ Issues = "https://github.com/prappleizer/refsync/issues"
 
 [project.scripts]
 refsync = "refsync.cli:main"
+refsync-explore = "refsync_explore.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
 
 [tool.setuptools.package-data]
 refsync = [
+    "frontend/templates/*.html",
+    "frontend/static/**/*",
+]
+refsync_explore = [
     "frontend/templates/*.html",
     "frontend/static/**/*",
 ]

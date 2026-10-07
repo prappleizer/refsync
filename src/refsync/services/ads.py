@@ -3,6 +3,7 @@ NASA ADS API service for syncing citations.
 """
 
 import re
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Optional
 
@@ -47,6 +48,41 @@ def _chunks(items: list, size: int = _QUERY_CHUNK):
         yield items[i : i + size]
 
 
+@dataclass
+class ADSQueryResult:
+    docs: list[dict]
+    num_found: int
+    rate_limit: dict  # {"limit": int, "remaining": int, "reset": int} (any may be None)
+
+
+def _rate_limit(headers) -> dict:
+    def _int(name):
+        try:
+            return int(headers.get(name))
+        except (TypeError, ValueError):
+            return None
+
+    return {
+        "limit": _int("X-RateLimit-Limit"),
+        "remaining": _int("X-RateLimit-Remaining"),
+        "reset": _int("X-RateLimit-Reset"),
+    }
+
+
+def arxiv_id_from_identifiers(identifiers: Optional[list[str]]) -> Optional[str]:
+    """
+    Pick the bare arXiv id out of an ADS `identifier` list, if there is one.
+
+    ADS lists e.g. ["2023ApJ...950...12P", "arXiv:2301.07041", "10.3847/abc",
+    "2023arXiv230107041P"]; this returns "2301.07041". Old-style ids come back
+    as "astro-ph/0601234".
+    """
+    for ident in identifiers or []:
+        if ident.lower().startswith("arxiv:"):
+            return _base_arxiv_id(ident)
+    return None
+
+
 class ADSClient:
     """Client for NASA ADS API"""
 
@@ -60,9 +96,24 @@ class ADSClient:
             "Content-Type": "application/json",
         }
 
-    async def _search(self, query: str, fl: str, rows: int) -> list[dict]:
-        """Run one /search/query request and return its docs."""
-        params = {"q": query, "fl": fl, "rows": min(max(rows, 1), 2000)}
+    async def query(
+        self,
+        q: str,
+        fl: str,
+        rows: int = 50,
+        start: int = 0,
+        sort: Optional[str] = None,
+    ) -> "ADSQueryResult":
+        """
+        Run one /search/query request.
+
+        Accepts full ADS query syntax (abs:, author:"^...", year:, references(),
+        citations(), similar(), ...). Returns the docs, the total match count and
+        the rate-limit state reported by ADS.
+        """
+        params = {"q": q, "fl": fl, "rows": min(max(rows, 1), 2000), "start": max(start, 0)}
+        if sort:
+            params["sort"] = sort
 
         async with httpx.AsyncClient(timeout=30.0) as client:
             response = await client.get(
@@ -73,10 +124,26 @@ class ADSClient:
             raise ADSError("Invalid ADS API key")
         elif response.status_code == 429:
             raise ADSError("ADS rate limit exceeded. Please try again later.")
+        elif response.status_code == 400:
+            # Usually a query syntax error; ADS puts the reason in the body
+            try:
+                detail = response.json().get("error", {}).get("msg") or response.text
+            except ValueError:
+                detail = response.text
+            raise ADSError(f"ADS could not parse the query: {str(detail)[:300]}")
         elif response.status_code != 200:
             raise ADSError(f"ADS API error: {response.status_code}")
 
-        return response.json().get("response", {}).get("docs", [])
+        body = response.json().get("response", {})
+        return ADSQueryResult(
+            docs=body.get("docs", []),
+            num_found=int(body.get("numFound", 0)),
+            rate_limit=_rate_limit(response.headers),
+        )
+
+    async def _search(self, query: str, fl: str, rows: int) -> list[dict]:
+        """Run one /search/query request and return its docs."""
+        return (await self.query(query, fl, rows=rows)).docs
 
     async def search_by_arxiv_ids(self, arxiv_ids: list[Optional[str]]) -> dict:
         """
@@ -199,7 +266,8 @@ class ADSClient:
 
         return results
 
-    def is_published(self, ads_record: dict) -> bool:
+    @staticmethod
+    def is_published(ads_record: dict) -> bool:
         """
         Determine if an ADS record represents a published paper (not just arXiv).
         """
@@ -455,9 +523,14 @@ async def fetch_ads_paper(bibcode: str) -> "Paper":
     # Build a journal_ref string if published
     journal_ref = _journal_ref(doc) if is_pub else None
 
+    # If ADS knows an arXiv id for this paper, use it: the internal id then
+    # matches what an arXiv-link add would produce, so the same paper can't be
+    # added twice via different links, and sync can match it by arXiv id.
+    arxiv_id = arxiv_id_from_identifiers(doc.get("identifier"))
+
     paper = Paper(
-        id=make_paper_id(bibcode=resolved_bibcode),
-        arxiv_id=None,
+        id=make_paper_id(arxiv_id=arxiv_id, bibcode=resolved_bibcode),
+        arxiv_id=arxiv_id,
         bibcode=resolved_bibcode,
         source="ads",
         title=title,
@@ -466,8 +539,10 @@ async def fetch_ads_paper(bibcode: str) -> "Paper":
         categories=[],
         published=published,
         updated=published,
-        pdf_url=ads_eprint_pdf_url(resolved_bibcode),
-        arxiv_url=None,
+        pdf_url=(
+            f"https://arxiv.org/pdf/{arxiv_id}" if arxiv_id else ads_eprint_pdf_url(resolved_bibcode)
+        ),
+        arxiv_url=f"https://arxiv.org/abs/{arxiv_id}" if arxiv_id else None,
         ads_url=ads_abstract_url(resolved_bibcode),
         added_at=datetime.utcnow(),
         doi=doi,

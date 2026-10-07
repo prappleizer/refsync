@@ -160,6 +160,11 @@ def _split_name(name: str) -> tuple[str, str, str]:
     return b, parts[0], a
 
 
+def split_name(name: str) -> tuple[str, str, str]:
+    """Public alias of _split_name: (first, last-with-particles, suffix)."""
+    return _split_name(name)
+
+
 def _to_ascii(text: str) -> str:
     """Drop accents and fold special letters: 'Kereš' -> 'Keres', 'Bjørn' -> 'Bjorn'."""
     text = text.translate(_ASCII_FOLD)

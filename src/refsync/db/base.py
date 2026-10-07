@@ -62,6 +62,13 @@ class PaperRepository(ABC):
         """All cite keys currently in the library"""
         pass
 
+    @abstractmethod
+    async def find_existing(
+        self, arxiv_id: Optional[str] = None, bibcode: Optional[str] = None
+    ) -> Optional[str]:
+        """Id of a paper with the same arXiv id or bibcode, if any"""
+        pass
+
 
 class ShelfRepository(ABC):
     """Abstract interface for shelf storage"""
