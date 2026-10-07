@@ -13,6 +13,20 @@ A citation manager for astronomers with seamless NASA ADS integration.
 - **Dark Mode**: Easy on the eyes for those late-night paper sessions
 - **Starred Papers**: Mark important papers for quick access
 
+## Updates
+Some recent changes have updates the way citations are handled in your databases. There are migration tools that help update citations such that they meet the new structure requirements. 
+
+For the most recent update, kill your running refsync server and then run 
+```
+python -m refsync.migration.regen_cite_keys
+```
+to preview changes to citations that might break latex due to atypical characters or spaces in names, if the list looks appropriate, apply the changes to your db via 
+```
+python -m refsync.migration.regen_cite_keys --apply
+```
+Then you can restart refsync and you should have updated citation values. 
+
+
 ## Installation
 
 Install from source:
