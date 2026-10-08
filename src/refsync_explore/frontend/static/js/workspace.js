@@ -12,7 +12,11 @@ import {
   toggleTheme,
   typesetSoon,
 } from "./common.js";
-import { PdfReader } from "./reader.js";
+import { PdfReader } from "/shared/pdfview.js";
+import { AnnotationSet } from "/shared/annotations-api.js";
+import { Annotator } from "/shared/annotator.js";
+import { NotesPane } from "/shared/notespane.js";
+import { SnipGallery } from "/shared/gallery.js";
 
 const [{ default: Alpine }, { default: Sortable }] = await Promise.all([
   import(CDN.alpine),
@@ -42,6 +46,9 @@ Alpine.data("workspace", (project, refsyncPort) => {
   const savers = {};
   let tagQueue = Promise.resolve();
   let openTicket = 0;
+  let annSet = null; // highlights / notes / snips of the open paper (shared with refsync)
+  let annotator = null;
+  let notesPane = null;
   const pid = project.id;
 
   return {
@@ -59,6 +66,13 @@ Alpine.data("workspace", (project, refsyncPort) => {
     selected: null,
     editingOneLiner: null,
     showRejected: false,
+
+    // notes & snips
+    readingMode: false,
+    galleryOpen: true,
+    snipMode: false,
+    annCounts: { total: 0, snip: 0 },
+    annSummary: {}, // paper id -> {highlight, note, snip, cover}
 
     // pane
     mode: "empty", // empty | search | paper
@@ -79,6 +93,7 @@ Alpine.data("workspace", (project, refsyncPort) => {
     cursor: 0,
     history: [],
     historyOpen: false,
+    recOpts: { mode: "all", min_year: null, include_triaged: false },
     addRef: "",
     addRefOpen: false,
 
@@ -97,6 +112,18 @@ Alpine.data("workspace", (project, refsyncPort) => {
         onPage: (n, total) => this.onPage(n, total),
         onState: (state, msg) => this.onPdfState(state, msg),
       });
+      annSet = new AnnotationSet({
+        currentProject: { id: pid, name: project.name },
+        notify: (msg, type) => (type === "error" ? toastError({ message: msg }) : toast(msg, type, 2200)),
+      });
+      annotator = new Annotator(reader, annSet, { host: this.$refs.viewer.parentElement });
+      annotator.onSnipMode((on) => (this.snipMode = on));
+      const jump = (a) => this.jumpToAnnotation(a);
+      notesPane = new NotesPane(this.$refs.notesPane, annSet, { onJump: jump, currentPage: () => reader.currentPage });
+      new SnipGallery(this.$refs.gallery, annSet, { onJump: jump, title: "Snips" });
+      annSet.onChange((items) => this.onAnnotationsChanged(items));
+      this.galleryOpen = store(`explore:gallery`) !== "0";
+      this.$watch("galleryOpen", (v) => store(`explore:gallery`, v ? "1" : "0"));
       this.$watch("filter", () => {
         this.applySortable();
         typesetSoon(); // cards re-created by the filter come back as raw $...$
@@ -108,6 +135,8 @@ Alpine.data("workspace", (project, refsyncPort) => {
         if (t === "pdf") this.$nextTick(() => this.loadPdf());
       });
       await Promise.all([this.loadBoard(), this.loadStatus()]);
+      this.loadSummaries();
+      notesPane.refreshProjects();
       const last = store(`explore:sel:${pid}`);
       if (last && this.cards[last]) this.selectCard(last, { scroll: true });
     },
@@ -133,6 +162,7 @@ Alpine.data("workspace", (project, refsyncPort) => {
         this.cards = cards;
         this.order = order;
         typesetSoon();
+        if (annSet) this.loadSummaries();
       } catch (e) {
         toastError(e);
       }
@@ -309,6 +339,14 @@ Alpine.data("workspace", (project, refsyncPort) => {
         this.paper = data.paper;
         if (data.card) this.mergeCard(data.card);
         typesetSoon();
+        // Annotations are keyed by refsync's id for the paper (same as ours unless
+        // refsync already had it under another id); read both to be safe.
+        const key = data.paper.refsync_id || data.paper.id;
+        if (annSet.paperKey !== key) {
+          annotator.setSnipMode(false);
+          annotator.closePopover();
+          annSet.setPaper(key, [data.paper.id]);
+        }
         // after Alpine has shown the reader (pdf.js can't scroll a hidden viewer)
         if (this.tab === "pdf") this.$nextTick(() => this.loadPdf());
         const card = this.cards[id];
@@ -320,6 +358,72 @@ Alpine.data("workspace", (project, refsyncPort) => {
 
     get card() {
       return this.paper ? this.cards[this.paper.id] || null : null;
+    },
+
+    // ------------------------------------------------------------ notes & snips
+    async loadSummaries() {
+      const ids = [];
+      for (const c of Object.values(this.cards)) {
+        ids.push(c.id);
+        if (c.refsync_id && c.refsync_id !== c.id) ids.push(c.refsync_id);
+      }
+      if (!ids.length) return;
+      try {
+        this.annSummary = await api("GET", `/api/annotations/summary?paper_id=${encodeURIComponent(ids.join(","))}`);
+      } catch (_) {
+        /* badges are optional */
+      }
+    },
+
+    _summaryFor(c) {
+      return this.annSummary[c.refsync_id] || this.annSummary[c.id] || null;
+    },
+
+    coverOf(c) {
+      const s = this._summaryFor(c);
+      return s && s.cover ? `/api/annotations/files/${encodeURIComponent(s.cover)}` : "";
+    },
+
+    noteCount(c) {
+      const s = this._summaryFor(c);
+      return s ? s.highlight + s.note : 0;
+    },
+
+    onAnnotationsChanged(items) {
+      const counts = { highlight: 0, note: 0, snip: 0 };
+      let cover = null;
+      for (const a of items) {
+        counts[a.kind] += 1;
+        if (a.starred) cover = a.image;
+      }
+      this.annCounts = { total: counts.highlight + counts.note + counts.snip, snip: counts.snip };
+      if (annSet.paperKey) {
+        const has = counts.highlight || counts.note || counts.snip;
+        const next = { ...this.annSummary };
+        for (const k of annSet.aliases) delete next[k];
+        if (has) next[annSet.paperKey] = { ...counts, cover };
+        this.annSummary = next;
+      }
+    },
+
+    jumpToAnnotation(a) {
+      if (!a.page) return;
+      const go = () => annotator.jumpTo(a);
+      if (this.tab !== "pdf") {
+        this.tab = "pdf";
+        this.$nextTick(() => setTimeout(go, 50));
+      } else go();
+    },
+
+    toggleReading() {
+      this.readingMode = !this.readingMode;
+      if (this.readingMode && this.mode === "search" && this.paper) this.mode = "paper";
+    },
+
+    toggleSnip() {
+      if (!this.paper || this.pdfState !== "ready") return;
+      if (this.tab !== "pdf") this.tab = "pdf";
+      annotator.setSnipMode(!this.snipMode);
     },
 
     loadPdf(force = false) {
@@ -523,7 +627,7 @@ Alpine.data("workspace", (project, refsyncPort) => {
     },
 
     loadMore() {
-      if (!this.results) return;
+      if (!this.results || this.results.kind === "recs") return;
       if (this.results.query !== this.query.trim()) this.query = this.results.query;
       this.sort = this.results.sort;
       this.runSearch({ label: this.results.label, start: this.results.hits.length });
@@ -551,6 +655,26 @@ Alpine.data("workspace", (project, refsyncPort) => {
       }
     },
 
+    async runRecommend({ refresh = false } = {}) {
+      if (this.searching) return;
+      this.searching = true;
+      this.historyOpen = false;
+      try {
+        const res = await api("POST", `/api/projects/${pid}/recommend`, {
+          mode: this.recOpts.mode,
+          min_year: this.recOpts.min_year || null,
+          include_triaged: this.recOpts.include_triaged,
+          refresh,
+        });
+        this.showResults(res);
+        if (refresh) toast("Reference and citation lists refreshed from ADS", "ok", 2000);
+      } catch (e) {
+        this.handleSearchError(e);
+      } finally {
+        this.searching = false;
+      }
+    },
+
     async toggleHistory() {
       this.historyOpen = !this.historyOpen;
       if (this.historyOpen) {
@@ -563,6 +687,10 @@ Alpine.data("workspace", (project, refsyncPort) => {
     },
 
     rerun(h) {
+      if (h.query === "recommend()") {
+        this.recOpts.mode = h.sort || "all";
+        return this.runRecommend();
+      }
       this.query = h.query;
       this.sort = h.sort || "relevance";
       this.runSearch({ label: h.label });
@@ -765,6 +893,10 @@ Alpine.data("workspace", (project, refsyncPort) => {
         this.helpOpen = true;
         return;
       }
+      if (k === "g") {
+        this.runRecommend();
+        return;
+      }
       if (k === "Escape") {
         this.editingOneLiner = null;
         this.historyOpen = false;
@@ -818,6 +950,14 @@ Alpine.data("workspace", (project, refsyncPort) => {
       }
       if (k === "d") {
         this.tab = this.tab === "pdf" ? "details" : "pdf";
+        return;
+      }
+      if (k === "n") {
+        this.toggleReading();
+        return;
+      }
+      if (k === "c") {
+        this.toggleSnip();
         return;
       }
       if (k === "j" || k === "k" || k === "ArrowDown" || k === "ArrowUp") {

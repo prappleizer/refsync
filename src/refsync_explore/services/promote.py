@@ -111,6 +111,7 @@ async def promote(
     carry_notes: bool = True,
     pdf_cache=None,
     ads_client=None,
+    annotations=None,
 ) -> list[dict]:
     """
     Add papers to refsync. Returns one result per paper:
@@ -161,6 +162,23 @@ async def promote(
         tag_colors = {t["name"]: t["color"] for t in await store.list_tags(db.conn, pid)}
         tag_repo = SQLiteTagRepository(rdb)
 
+        async def hand_over_pdf(explore_id: str, refsync_paper) -> Optional[str]:
+            """Copy explore's PDF into refsync's library if refsync has none. Error message or None."""
+            if not pdf_cache or refsync_paper is None or refsync_paper.local_pdf:
+                return None
+            # a background prefetch may still be finishing: give it a moment
+            cached = await pdf_cache.settled(explore_id)
+            if not cached:
+                return None
+            try:
+                cfg.refsync_pdf_dir.mkdir(parents=True, exist_ok=True)
+                filename = generate_pdf_filename(refsync_paper)
+                shutil.copyfile(cached, cfg.refsync_pdf_dir / filename)
+                await papers_repo.update(refsync_paper.id, PaperUpdate(local_pdf=filename))
+            except Exception as e:
+                return f"the PDF couldn't be copied: {e}"
+            return None
+
         async def merge_into_existing(existing_id: str, tags: list[str]) -> None:
             current = await papers_repo.get(existing_id)
             if current:
@@ -196,11 +214,31 @@ async def promote(
                 if existing_id:
                     await merge_into_existing(existing_id, tags)
                     await store.mark_promoted(db.conn, pid, paper_id, existing_id)
-                    results.append({"id": paper_id, "status": "exists", "refsync_id": existing_id})
+                    result = {"id": paper_id, "status": "exists", "refsync_id": existing_id}
+                    problems = []
+                    if annotations is not None:
+                        try:
+                            # notes/snips made here follow the paper to the id refsync uses
+                            await annotations.rekey(paper_id, existing_id)
+                            await annotations.sync_cover(existing_id)
+                        except Exception as e:  # never fail a promote that already happened
+                            problems.append(f"notes couldn't be moved: {e}")
+                    problem = await hand_over_pdf(paper_id, await papers_repo.get(existing_id))
+                    if problem:
+                        problems.append(problem)
+                    if problems:
+                        result["message"] = "Already in refsync, but " + "; ".join(problems)
+                    results.append(result)
                     continue
 
                 # The paper is in refsync now: record that before anything optional
                 await store.mark_promoted(db.conn, pid, paper_id, created.id)
+                if annotations is not None:
+                    try:
+                        # highlights/notes are already shared; the starred snip becomes the cover
+                        await annotations.sync_cover(created.id)
+                    except Exception as e:  # cover is a nicety; never fail the promote
+                        print(f"Cover sync failed for {created.id}: {e}")
                 result = {
                     "id": paper_id,
                     "status": "added",
@@ -209,15 +247,9 @@ async def promote(
                 }
 
                 # Hand over the cached PDF so it's already "saved offline" in refsync
-                cached = pdf_cache.cached(paper_id) if pdf_cache else None
-                if cached:
-                    try:
-                        cfg.refsync_pdf_dir.mkdir(parents=True, exist_ok=True)
-                        filename = generate_pdf_filename(created)
-                        shutil.copyfile(cached, cfg.refsync_pdf_dir / filename)
-                        await papers_repo.update(created.id, PaperUpdate(local_pdf=filename))
-                    except Exception as e:
-                        result["message"] = f"Added, but the PDF couldn't be copied: {e}"
+                problem = await hand_over_pdf(paper_id, created)
+                if problem:
+                    result["message"] = f"Added, but {problem}"
                 results.append(result)
             except Exception as e:  # report per paper, keep going
                 results.append({"id": paper_id, "status": "error", "message": str(e)})

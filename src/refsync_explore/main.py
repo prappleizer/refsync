@@ -9,6 +9,8 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
+from refsync.annotations import AnnotationStore
+from refsync.annotations.router import build_router as build_annotations_router
 from refsync.routers import settings as refsync_settings_router
 
 from . import __version__, store
@@ -32,8 +34,18 @@ def create_app(cfg: Optional[ExploreSettings] = None, pdf_transport=None) -> Fas
         app.state.catalog = Catalog(cfg.refsync_db_path)
         app.state.pdf_cache = PdfCache(db, cfg.pdf_dir, transport=pdf_transport)
         app.state.rate = None
+        annotations = AnnotationStore(
+            cfg.annotations_db_path,
+            cfg.annotations_dir,
+            library_db_path=cfg.refsync_db_path,
+            uploads_dir=cfg.refsync_uploads_dir,
+        )
+        await annotations.connect()
+        app.state.annotations = annotations
+        app.state.explore_db_path = cfg.db_path
         yield
         await app.state.pdf_cache.close()
+        await annotations.disconnect()
         await db.disconnect()
 
     app = FastAPI(title="refsync-explore", version=__version__, lifespan=lifespan)
@@ -49,6 +61,7 @@ def create_app(cfg: Optional[ExploreSettings] = None, pdf_transport=None) -> Fas
         return await call_next(request)
 
     app.mount("/static", StaticFiles(directory=str(cfg.static_dir)), name="static")
+    app.mount("/shared", StaticFiles(directory=str(cfg.shared_static_dir)), name="shared")
     templates = Jinja2Templates(directory=str(cfg.templates_dir))
 
     app.include_router(projects.router)
@@ -56,6 +69,7 @@ def create_app(cfg: Optional[ExploreSettings] = None, pdf_transport=None) -> Fas
     app.include_router(papers.router)
     # Same ADS key endpoints as refsync (the key itself is shared)
     app.include_router(refsync_settings_router.router)
+    app.include_router(build_annotations_router("explore"))
 
     def page(request: Request, name: str, **context):
         context.setdefault("refsync_port", cfg.refsync_port)

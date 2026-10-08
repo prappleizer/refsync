@@ -8,6 +8,7 @@ A citation manager for astronomers with seamless NASA ADS integration.
 
 - **Paper Library**: Import papers from arXiv, organize with shelves and tags [coming soon: import from ADS]. Explore papers via cards, lists, multifactor filtering, or search across titles, abstracts, authors, or personal notes. 
 - **Image Headers**: Attach (soon: choose) figures or images from papers to serve as card headers, for finding that one plot you remember
+- **Read & Annotate**: Built-in PDF reader with highlights, notes and figure snips (star a snip to make it the card header). The PDF is saved to your library the first time you open it. Annotations are shared with refsync-explore, so notes made during a lit review come along with the paper.
 - **ADS Sync**: One-click sync to update arXiv preprints with published journal info: any preprints published to journal in the interim get new citation bibtex with updated information
 - **BibTeX Export**: Export citations in bibtex form for individual papers, collections, or any filtered set of papers, either to clipboard or `.bib` file. Bibtex are referenced via convenient Author:Year format.
 - **Dark Mode**: Easy on the eyes for those late-night paper sessions

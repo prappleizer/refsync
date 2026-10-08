@@ -5,6 +5,8 @@ from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
+from .annotations import AnnotationStore
+from .annotations.router import build_router as build_annotations_router
 from .config import settings
 from .db import SQLiteDatabase, SQLitePaperRepository, SQLiteShelfRepository, SQLiteTagRepository
 from .routers import papers, shelves, tags
@@ -29,9 +31,21 @@ async def lifespan(app: FastAPI):
     shelves.set_repos(shelf_repo, paper_repo)
     tags.set_tag_repo(tag_repo)
 
+    # Highlights / notes / snips (same store as refsync-explore)
+    annotations = AnnotationStore(
+        settings.annotations_db_path,
+        settings.annotations_dir,
+        library_db_path=settings.database_path,
+        uploads_dir=settings.uploads_dir,
+    )
+    await annotations.connect()
+    app.state.annotations = annotations
+    app.state.explore_db_path = settings.explore_db_path
+
     yield
 
     # Shutdown
+    await annotations.disconnect()
     await db.disconnect()
 
 
@@ -50,6 +64,7 @@ app.include_router(papers.router)
 app.include_router(shelves.router)
 app.include_router(tags.router)
 app.include_router(settings_router.router)
+app.include_router(build_annotations_router("refsync"))
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -65,6 +80,11 @@ async def library(request: Request):
 @app.get("/paper/{id}", response_class=HTMLResponse)
 async def paper_detail(request: Request, id: str):
     return templates.TemplateResponse(request, "paper.html", context={"id": id})
+
+
+@app.get("/paper/{id}/read", response_class=HTMLResponse)
+async def paper_read(request: Request, id: str):
+    return templates.TemplateResponse(request, "read.html", context={"id": id})
 
 
 @app.get("/settings", response_class=HTMLResponse)

@@ -136,6 +136,19 @@ class PdfCache:
         await store.set_pdf_state(self.db.conn, paper["id"], "failed", error=msg)
         raise PdfUnavailable(msg)
 
+    async def settled(self, paper_id: str, timeout: float = 20.0) -> Optional[Path]:
+        """The cached PDF; if it's downloading right now, wait (up to `timeout`) for it."""
+        hit = self.cached(paper_id)
+        if hit:
+            return hit
+        lock = self._locks.get(paper_id)
+        if lock is None or not lock.locked():
+            return None
+        try:
+            return await asyncio.wait_for(self.ensure(paper_id, retry_failed=False), timeout)
+        except (asyncio.TimeoutError, PdfUnavailable):
+            return None
+
     async def save_upload(self, paper_id: str, data: bytes) -> Path:
         if data[:5] != b"%PDF-":
             raise PdfUnavailable("That file isn't a PDF.")

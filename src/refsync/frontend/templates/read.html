@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Reader · RefSync</title>
+  <script>
+    // same dark-mode switch as the rest of refsync
+    try { if (localStorage.getItem("darkMode") === "true") document.documentElement.classList.add("dark"); } catch (_) {}
+  </script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>tailwind.config = { darkMode: "class", theme: { extend: { colors: { arxiv: { red: "#b31b1b" } } } } };</script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/web/pdf_viewer.css">
+  <link rel="stylesheet" href="/static/shared/annotations.css">
+  <style>
+    .viewerContainer { position: absolute; inset: 0; overflow: auto; }
+    .pdfViewer .page { box-shadow: 0 2px 8px rgba(0,0,0,.2); margin: 10px auto; border: 0; }
+    .toast { position: fixed; right: 16px; bottom: 16px; z-index: 80; }
+    [hidden] { display: none !important; }
+  </style>
+</head>
+<body class="h-full flex flex-col bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-100 text-sm">
+  <header class="h-12 flex items-center gap-3 px-3 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 shrink-0">
+    <a href="/paper/{{ id }}" class="text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white whitespace-nowrap">← Paper</a>
+    <div class="min-w-0 flex-1">
+      <div id="title" class="font-medium truncate">Loading…</div>
+      <div id="authors" class="text-xs text-gray-500 dark:text-gray-400 truncate"></div>
+    </div>
+    <span id="snip-hint" class="text-blue-600 dark:text-blue-400 font-medium" hidden>Drag a box around a figure · Esc to cancel</span>
+    <button id="snip" class="px-2.5 py-1 rounded-md border border-gray-200 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700" title="Snip a figure (c)">✂ Snip</button>
+    <span id="pageinfo" class="text-gray-500 dark:text-gray-400 whitespace-nowrap"></span>
+    <button data-zoom="-1" class="px-2 py-1 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700" title="Zoom out">−</button>
+    <button id="fit" class="px-2 py-1 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700" title="Fit width">Fit</button>
+    <button data-zoom="1" class="px-2 py-1 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700" title="Zoom in">+</button>
+    <button id="toggle-side" class="px-2.5 py-1 rounded-md border border-gray-200 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700" title="Show/hide notes (n)">Notes</button>
+    <button id="theme" class="px-2 py-1 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700" title="Dark mode"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 0 0 18z" fill="currentColor"/></svg></button>
+  </header>
+
+  <div class="flex-1 min-h-0 flex">
+    <main id="reader-host" class="relative flex-1 min-w-0">
+      <div class="viewerContainer" id="viewer"></div>
+      <div id="msg" class="absolute inset-0 z-10 grid place-items-center bg-gray-100 dark:bg-gray-900 text-gray-500 dark:text-gray-400 text-center p-8">
+        <div>
+          <div id="msg-text">Loading…</div>
+          <div id="msg-actions" class="mt-3 flex gap-2 justify-center" hidden>
+            <label class="px-3 py-1.5 rounded-lg bg-arxiv-red text-white cursor-pointer">Upload PDF…
+              <input id="upload" type="file" accept="application/pdf" class="hidden"></label>
+            <button id="retry" class="px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-600">Retry</button>
+          </div>
+        </div>
+      </div>
+    </main>
+    <aside id="side" class="w-[400px] shrink-0 flex flex-col min-h-0 border-l border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/60">
+      <div id="gallery" class="p-3 border-b border-gray-200 dark:border-gray-700 max-h-[40%] overflow-y-auto"></div>
+      <div id="notes" class="flex-1 min-h-0"></div>
+    </aside>
+  </div>
+
+  <script type="module">
+    import { PdfReader } from "/static/shared/pdfview.js";
+    import { AnnotationSet } from "/static/shared/annotations-api.js";
+    import { Annotator } from "/static/shared/annotator.js";
+    import { NotesPane } from "/static/shared/notespane.js";
+    import { SnipGallery } from "/static/shared/gallery.js";
+
+    const id = {{ id | tojson }};
+    const params = new URLSearchParams(location.search);
+    const $ = (s) => document.querySelector(s);
+
+    function toast(message, type = "info") {
+      const el = document.createElement("div");
+      el.className = `toast px-4 py-2 rounded-lg shadow-lg text-white ${type === "error" ? "bg-red-600" : type === "ok" ? "bg-green-600" : "bg-gray-800"}`;
+      el.textContent = message;
+      document.body.appendChild(el);
+      setTimeout(() => el.remove(), type === "error" ? 5000 : 2500);
+    }
+
+    function showMsg(text, actions = false) {
+      $("#msg").hidden = !text;
+      $("#msg-text").textContent = text || "";
+      $("#msg-actions").hidden = !actions;
+    }
+
+    const reader = new PdfReader($("#viewer"));
+    const set = new AnnotationSet({ notify: toast });
+    const annotator = new Annotator(reader, set, { host: $("#reader-host") });
+    const jump = (a) => annotator.jumpTo(a);
+    new SnipGallery($("#gallery"), set, { onJump: jump, title: "Snips" });
+    new NotesPane($("#notes"), set, { onJump: jump, currentPage: () => reader.currentPage }).refreshProjects();
+
+    // remember where you were in each paper (this browser only)
+    const pageKey = `refsync:page:${id}`;
+    reader.on("page", (n, total) => {
+      $("#pageinfo").textContent = `p. ${n} / ${total}`;
+      try { localStorage.setItem(pageKey, String(n)); } catch (_) {}
+    });
+    reader.on("state", (state, message) => {
+      if (state === "ready") showMsg("");
+      if (state === "error") showMsg(message, true);
+    });
+    annotator.onSnipMode((on) => {
+      $("#snip-hint").hidden = !on;
+      $("#snip").classList.toggle("ring-2", on);
+    });
+
+    async function open(force = false) {
+      let paper;
+      try {
+        const res = await fetch(`/api/papers/${encodeURIComponent(id)}`);
+        if (!res.ok) throw new Error("Paper not found");
+        paper = await res.json();
+      } catch (e) {
+        showMsg(e.message);
+        return;
+      }
+      document.title = `${paper.title} · RefSync`;
+      $("#title").textContent = paper.title;
+      $("#authors").textContent = paper.authors.slice(0, 6).join(", ") + (paper.authors.length > 6 ? " …" : "");
+      // PDFs are kept in the library so highlights always sit on the same file
+      showMsg(paper.local_pdf ? "Loading PDF…" : "Saving PDF to your library for note-taking…");
+      await set.setPaper(paper.id);
+      const target = params.get("ann") ? set.get(params.get("ann")) : null;
+      let page = Number(params.get("page")) || null;
+      try { page = page || Number(localStorage.getItem(pageKey)) || 1; } catch (_) { page = page || 1; }
+      if (force) reader.currentKey = null;
+      await reader.open(`/api/papers/${encodeURIComponent(paper.id)}/pdf`, {
+        key: paper.id,
+        page: target ? target.page : page,
+        top: target ? target.top : null,
+      });
+      // jumpTo uses the passage's position in *this* PDF (it may have been made on another version)
+      if (target) setTimeout(() => annotator.jumpTo(set.get(target.id) || target), 400);
+    }
+
+    $("#snip").addEventListener("click", () => annotator.setSnipMode(!annotator.snipMode));
+    $("#fit").addEventListener("click", () => reader.fitWidth());
+    document.querySelectorAll("[data-zoom]").forEach((b) => b.addEventListener("click", () => reader.zoom(Number(b.dataset.zoom))));
+    $("#toggle-side").addEventListener("click", () => ($("#side").hidden = !$("#side").hidden));
+    $("#theme").addEventListener("click", () => {
+      const dark = document.documentElement.classList.toggle("dark");
+      try { localStorage.setItem("darkMode", String(dark)); } catch (_) {}
+    });
+    $("#retry").addEventListener("click", () => open(true));
+    $("#upload").addEventListener("change", async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const form = new FormData();
+      form.append("file", file);
+      const res = await fetch(`/api/papers/${encodeURIComponent(id)}/pdf`, { method: "POST", body: form });
+      if (res.ok) {
+        toast("PDF saved to your library", "ok");
+        open(true);
+      } else toast((await res.json()).detail || "Upload failed", "error");
+    });
+    window.addEventListener("keydown", (e) => {
+      const t = e.target;
+      if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      if (e.key === "c") annotator.setSnipMode(!annotator.snipMode);
+      else if (e.key === "n") $("#side").hidden = !$("#side").hidden;
+    });
+    open();
+  </script>
+</body>
+</html>

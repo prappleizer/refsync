@@ -2,6 +2,7 @@ import uuid
 from typing import Optional
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from ..config import settings
@@ -234,6 +235,50 @@ async def download_paper_pdf(id: str, repo: PaperRepository = Depends(get_paper_
 
     await repo.update(id, PaperUpdate(local_pdf=filename))
     return {"status": "success", "filename": filename, "message": "PDF downloaded"}
+
+
+@router.get("/{id}/pdf")
+async def get_paper_pdf(id: str, repo: PaperRepository = Depends(get_paper_repo)):
+    """
+    The paper's PDF for the built-in reader. Served from the library copy; if
+    there isn't one yet it's downloaded and saved to the library first (so
+    highlights and notes always sit on a stable local file).
+    """
+    from ..services.pdf import download_pdf, get_pdf_path
+
+    paper = await repo.get(id)
+    if not paper:
+        raise HTTPException(status_code=404, detail="Paper not found")
+    path = get_pdf_path(paper.local_pdf) if paper.local_pdf else None
+    if not path:
+        filename = await download_pdf(paper)
+        if not filename:
+            raise HTTPException(
+                status_code=404,
+                detail="Couldn't download this paper's PDF (it may need a publisher login). "
+                "You can upload the PDF instead.",
+            )
+        await repo.update(id, PaperUpdate(local_pdf=filename))
+        path = settings.pdf_dir / filename
+    return FileResponse(path, media_type="application/pdf", filename=path.name)
+
+
+@router.post("/{id}/pdf", response_model=Paper)
+async def upload_paper_pdf(
+    id: str, file: UploadFile = File(...), repo: PaperRepository = Depends(get_paper_repo)
+):
+    """Attach a PDF by hand (e.g. a publisher PDF that needs a login)."""
+    from ..services.pdf import generate_pdf_filename
+
+    paper = await repo.get(id)
+    if not paper:
+        raise HTTPException(status_code=404, detail="Paper not found")
+    content = await file.read()
+    if content[:5] != b"%PDF-":
+        raise HTTPException(status_code=400, detail="That file isn't a PDF")
+    filename = generate_pdf_filename(paper)
+    (settings.pdf_dir / filename).write_bytes(content)
+    return await repo.update(id, PaperUpdate(local_pdf=filename))
 
 
 @router.delete("/{id}/local-pdf")

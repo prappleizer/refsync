@@ -262,5 +262,6 @@ async def promote_papers(request: Request, pid: str, data: PromoteRequest):
         carry_tags=data.carry_tags,
         carry_notes=data.carry_notes,
         pdf_cache=st.pdf_cache,
+        annotations=st.annotations,
     )
     return {"results": results}

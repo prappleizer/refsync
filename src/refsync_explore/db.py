@@ -108,6 +108,15 @@ MIGRATIONS: list[str] = [
             REFERENCES project_tags(project_id, name) ON DELETE CASCADE ON UPDATE CASCADE
     );
     """,
+    # --- v2: cached reference / citation lists (for recommendations) ------------
+    """
+    CREATE TABLE paper_links (
+        bibcode TEXT PRIMARY KEY,
+        refs TEXT NOT NULL DEFAULT '[]',   -- bibcodes this paper cites
+        cites TEXT NOT NULL DEFAULT '[]',  -- bibcodes of papers citing it
+        fetched_at TEXT NOT NULL
+    );
+    """,
 ]
 
 

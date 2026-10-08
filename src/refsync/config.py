@@ -37,6 +37,25 @@ class Settings(BaseSettings):
     def pdf_dir(self) -> Path:
         return self.data_dir / "pdfs"
 
+    # Highlights / notes / snips, shared with refsync-explore
+    @property
+    def annotations_db_path(self) -> Path:
+        return self.data_dir / "annotations.db"
+
+    @property
+    def annotations_dir(self) -> Path:
+        return self.data_dir / "annotations"
+
+    # refsync-explore's database (read-only here: project names for note tags)
+    @property
+    def explore_db_path(self) -> Path:
+        explore_dir = os.environ.get("REFSYNC_EXPLORE_DIR")
+        return (
+            Path(explore_dir) / "explore.db"
+            if explore_dir
+            else self.data_dir / "explore" / "explore.db"
+        )
+
     @property
     def templates_dir(self) -> Path:
         return self.package_dir / "frontend" / "templates"

@@ -2,6 +2,7 @@
 {% block title %}{{ project.name }} · refsync explore{% endblock %}
 {% block head %}
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/web/pdf_viewer.css">
+<link rel="stylesheet" href="/shared/annotations.css?v={{ version }}">
 {% endblock %}
 
 {% block body %}
@@ -42,6 +43,9 @@
       </div>
     </form>
 
+    <button class="btn" @click="runRecommend()" :disabled="searching"
+            title="Papers most cited by / citing your Staging + Probables (g)">Recommended</button>
+
     <div style="position:relative" @click.outside="addRefOpen = false">
       <button class="btn" @click="toggleAddRef()" title="Add a paper from an arXiv/ADS link, id, bibcode or DOI">+ Add by link</button>
       <form class="popover addref-pop" x-show="addRefOpen" x-cloak
@@ -68,7 +72,16 @@
   </div>
 
   <!-- ============================ board + pane ============================ -->
-  <main class="ws" :class="{ 'rej-open': showRejected }">
+  <main class="ws" :class="{ 'rej-open': showRejected, reading: readingMode }">
+
+    <!-- reading mode: the paper's notes & highlights replace the triage columns -->
+    <section class="notes-col" x-show="readingMode" x-cloak>
+      <div class="notes-col-head">
+        <button class="btn sm ghost" @click="toggleReading()" title="Back to the columns (n)">← Columns</button>
+        <span class="faint" x-show="paper" x-text="paper ? paper.author_label + ' ' + (paper.year || '') : ''"></span>
+      </div>
+      <div class="notes-col-body" x-ref="notesPane"></div>
+    </section>
 
     <template x-for="col in ['staging', 'probables']" :key="col">
       <section class="col" :class="col">
@@ -101,11 +114,13 @@
                 <span class="who" x-text="c.author_label + ' ' + (c.year || '')"></span>
                 <span x-text="c.bibstem || ''"></span>
                 <span class="r">
+                  <span class="ann-count" x-show="noteCount(c)" x-text="'✎' + noteCount(c)" title="Highlights and notes"></span>
                   <span x-show="c.citation_count != null" x-text="c.citation_count + ' cit'"></span>
                   <span class="pdfdot" :class="c.pdf_status" :title="'PDF: ' + (c.pdf_status === 'ok' ? 'cached' : c.pdf_status === 'failed' ? 'not available' : 'not fetched yet')"></span>
                 </span>
               </div>
               <div class="title" x-text="c.title"></div>
+              <img class="card-cover" x-show="coverOf(c)" :src="coverOf(c)" alt="" loading="lazy">
               <template x-if="editingOneLiner === c.id">
                 <input class="input oneliner-edit" x-init="$nextTick(() => $el.focus())"
                        :value="c.one_liner || ''" placeholder="One-line summary…"
@@ -159,14 +174,33 @@
           <div class="results-head">
             <div style="flex:1;min-width:0">
               <div class="q" x-text="results.label || results.query" :title="results.query"></div>
-              <div class="n">
+              <div class="n" x-show="results.kind !== 'recs'">
                 <span x-text="results.num_found.toLocaleString() + ' results'"></span>
                 <span x-show="results.hits.length < results.num_found"
                       x-text="' · showing ' + results.hits.length"></span>
                 <span x-text="' · ' + newCount() + ' not yet triaged'"></span>
               </div>
+              <div class="n" x-show="results.kind === 'recs'">
+                <span x-text="results.seeds + ' seed papers · ' + (results.considered || 0).toLocaleString() + ' connected'"
+                      title="Seeds are your Staging (weight 1) and Probables (weight 1.5) papers"></span>
+                <span x-show="results.seeds === 0"> · stage a few papers first</span>
+              </div>
             </div>
-            <select class="select" :value="results.sort" @change="resort($event.target.value)">
+            <template x-if="results.kind === 'recs'">
+              <div class="row" style="display:flex;gap:6px;align-items:center">
+                <select class="select" x-model="recOpts.mode" @change="runRecommend()" title="Which links count">
+                  <option value="all">Cited by or citing</option>
+                  <option value="references">Cited by your papers</option>
+                  <option value="citations">Citing your papers</option>
+                </select>
+                <input class="input" type="number" min="1900" max="2100" placeholder="from year"
+                       style="width:92px" x-model.number="recOpts.min_year" @change="runRecommend()">
+                <label class="muted" style="font-size:12px;white-space:nowrap">
+                  <input type="checkbox" x-model="recOpts.include_triaged" @change="runRecommend()"> show triaged</label>
+                <button class="btn sm" @click="runRecommend({ refresh: true })" title="Re-fetch reference/citation lists from ADS">Refresh</button>
+              </div>
+            </template>
+            <select class="select" :value="results.sort" @change="resort($event.target.value)" x-show="results.kind !== 'recs'">
               <option value="relevance">Relevance</option>
               <option value="date">Newest</option>
               <option value="citations">Most cited</option>
@@ -193,6 +227,17 @@
                     <span class="badge refsync" x-show="h.refsync_id">in refsync</span>
                   </div>
                   <div class="title" x-text="h.title" @click="openHit(h)" title="Open in reader"></div>
+                  <div class="reason" x-show="h.reason" x-cloak>
+                    <span class="score" x-text="h.reason && h.reason.score"></span>
+                    <span x-show="h.reason && h.reason.cited_by.length"
+                          :title="h.reason && h.reason.cited_by.map(s => s.label).join('\n')"
+                          x-text="h.reason && ('cited by ' + h.reason.cited_by.length + ' of yours')"></span>
+                    <span x-show="h.reason && h.reason.cited_by.length && h.reason.cites.length">·</span>
+                    <span x-show="h.reason && h.reason.cites.length"
+                          :title="h.reason && h.reason.cites.map(s => s.label).join('\n')"
+                          x-text="h.reason && ('cites ' + h.reason.cites.length + ' of yours')"></span>
+                    <span class="faint" x-text="h.reason && ('(' + h.reason.cited_by.concat(h.reason.cites).slice(0, 3).map(s => s.label).join(', ') + ((h.reason.cited_by.length + h.reason.cites.length) > 3 ? ', …' : '') + ')')"></span>
+                  </div>
                   <div class="oneliner" x-show="h.status && h.status.one_liner" x-text="h.status && h.status.one_liner"></div>
                   <div class="abs" x-show="expanded[h.id]" x-text="h.abstract || 'No abstract.'"></div>
                   <a href="#" class="faint" style="font-size:11.5px" @click.prevent="expanded[h.id] = !expanded[h.id]"
@@ -257,10 +302,18 @@
           </div>
         </template>
 
+        <div class="paper-gallery" x-ref="gallery" x-show="paper && galleryOpen"></div>
+
         <div class="tabs">
           <button :class="{ on: tab === 'pdf' }" @click="tab = 'pdf'">PDF</button>
-          <button :class="{ on: tab === 'details' }" @click="tab = 'details'">Notes &amp; abstract</button>
+          <button :class="{ on: tab === 'details' }" @click="tab = 'details'">Card &amp; abstract</button>
+          <button class="tab-tool" :class="{ on: readingMode }" @click="toggleReading()" title="Notes & highlights for this paper (n)">
+            Notes<span class="faint" x-show="annCounts.total" x-text="' ' + annCounts.total"></span></button>
+          <button class="tab-tool" :class="{ on: galleryOpen }" @click="galleryOpen = !galleryOpen" title="Figure snips and highlighted passages">
+            Snips<span class="faint" x-show="annCounts.snip" x-text="' ' + annCounts.snip"></span></button>
           <div class="r" x-show="tab === 'pdf' && pdfState === 'ready'">
+            <span class="snip-hint" x-show="snipMode">Drag a box around a figure · Esc to cancel</span>
+            <button class="btn sm" :class="{ on: snipMode }" @click="toggleSnip()" title="Snip a figure (c)">✂ Snip</button>
             <span x-text="pageInfo"></span>
             <button class="btn sm ghost" @click="zoom(-1)" title="Zoom out">−</button>
             <button class="btn sm ghost" @click="fitWidth()" title="Fit width">Fit</button>
@@ -411,8 +464,12 @@
         <span class="kbd">e</span><span>Edit the one-liner of the selected card</span>
         <span class="kbd">t</span><span>Add a tag to the selected card</span>
         <span class="kbd">r</span><span>Toggle read / skimmed</span>
-        <span class="kbd">d</span><span>Switch between PDF and Notes &amp; abstract</span>
+        <span class="kbd">d</span><span>Switch between the PDF and Card &amp; abstract</span>
         <span class="kbd">s</span><span>Show search results again</span>
+        <span class="kbd">g</span><span>Recommended papers (from your Staging + Probables)</span>
+        <span class="kbd">h / n</span><span>With text selected in the PDF: highlight it / highlight and add a note</span>
+        <span class="kbd">n</span><span>Otherwise: show this paper's notes &amp; highlights in place of the columns</span>
+        <span class="kbd">c</span><span>Snip a figure: drag a box on the page (the first snip becomes the cover)</span>
         <span class="kbd">Esc</span><span>Close results / cancel editing</span>
       </div>
     </div>

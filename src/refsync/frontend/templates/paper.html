@@ -2,6 +2,10 @@
 
 {% block title %}Paper - arXiv Library{% endblock %}
 
+{% block head %}
+<link rel="stylesheet" href="/static/shared/annotations.css">
+{% endblock %}
+
 {% block content %}
 <div x-data="paperDetail('{{ id }}')" x-init="init()">
     
@@ -68,7 +72,15 @@
                         </div>
                         
                         <!-- Links -->
-                        <div class="flex flex-wrap gap-4 mt-6 pt-6 border-t border-gray-100 dark:border-gray-700">
+                        <div class="flex flex-wrap items-center gap-4 mt-6 pt-6 border-t border-gray-100 dark:border-gray-700">
+                            <!-- Built-in reader with highlights, notes and snips -->
+                            <a :href="'/paper/' + encodeURIComponent(paper.id) + '/read'"
+                               class="inline-flex items-center px-3 py-1.5 text-sm rounded-lg bg-arxiv-red text-white hover:bg-red-700">
+                                <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/>
+                                </svg>
+                                Read &amp; annotate
+                            </a>
                             <!-- arXiv page (red) -->
                             <a x-show="paper.arxiv_url" :href="paper.arxiv_url" target="_blank"
                                class="inline-flex items-center text-sm text-arxiv-red dark:text-red-400 hover:underline">
@@ -256,10 +268,45 @@
             </div>
         </div>
     </template>
+    <!-- Snips & highlights (mounted by the script below; Alpine leaves it alone) -->
+    <div x-show="paper" x-cloak class="mt-6">
+        <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6 mb-6">
+            <div class="flex items-center justify-between mb-3">
+                <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">Snips &amp; highlights</h3>
+                <a :href="paper ? '/paper/' + encodeURIComponent(paper.id) + '/read' : '#'"
+                   class="text-sm text-blue-600 dark:text-blue-400 hover:underline">Open reader →</a>
+            </div>
+            <div id="rs-gallery" x-ignore></div>
+        </div>
+    </div>
+
 </div>
 {% endblock %}
 
 {% block scripts %}
+<script type="module">
+    import { AnnotationSet } from "/static/shared/annotations-api.js";
+    import { SnipGallery } from "/static/shared/gallery.js";
+
+    const paperId = {{ id | tojson }};
+    const set = new AnnotationSet({ notify: (m, t) => showToast(m, t === "error" ? "error" : "success") });
+    new SnipGallery(document.getElementById("rs-gallery"), set, {
+        title: "Snips",
+        expanded: true,
+        onJump: (a) => (location.href = `/paper/${encodeURIComponent(paperId)}/read?ann=${a.id}`),
+    });
+    // starring a snip changes the cover: refresh the paper card
+    let lastCover;
+    set.onChange((items) => {
+        const cover = (items.find((a) => a.starred) || {}).image || null;
+        if (lastCover !== undefined && cover !== lastCover) {
+            const root = document.querySelector('[x-data^="paperDetail"]');
+            if (root && window.Alpine) window.Alpine.$data(root).loadPaper();
+        }
+        lastCover = cover;
+    });
+    set.setPaper(paperId);
+</script>
 <script>
 function paperDetail(paperId) {
     return {

@@ -8,7 +8,7 @@ from pydantic import BaseModel
 from refsync.services.ads import ADSError
 
 from .. import store
-from ..services import ads_search
+from ..services import ads_search, recommend
 from .deps import require_project
 
 router = APIRouter(prefix="/api/projects", tags=["search"])
@@ -93,3 +93,34 @@ async def hop(request: Request, pid: str, data: HopRequest):
 async def searches(request: Request, pid: str):
     await require_project(request, pid)
     return await store.list_searches(request.app.state.db.conn, pid)
+
+
+class RecommendRequest(BaseModel):
+    mode: str = "all"  # all | references | citations
+    include_triaged: bool = False
+    min_year: Optional[int] = None
+    limit: int = 100
+    refresh: bool = False
+
+
+@router.post("/{pid}/recommend")
+async def recommend_papers(request: Request, pid: str, data: RecommendRequest):
+    """Papers most connected (by references/citations) to this project's staged + probable papers."""
+    await require_project(request, pid)
+    st = request.app.state
+    try:
+        res = await recommend.recommend(
+            st.db.conn,
+            pid,
+            mode=data.mode,
+            include_triaged=data.include_triaged,
+            min_year=data.min_year,
+            limit=max(1, min(data.limit, 300)),
+            refresh=data.refresh,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except ADSError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    st.catalog.annotate(res["hits"])
+    return res
